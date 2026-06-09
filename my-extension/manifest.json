@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Joblens",
+  "version": "1.0",
+  "description": "A browser extension that helps you understand roles and responsibilites in depth such that you can better represent yourself in a job interview or via a cold email.",
+  "action": {
+    "default_icon": "Insightlens.png",
+    "default_title": "Joblens"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "http://localhost:8006/*",
+    "https://www.linkedin.com/*",
+    "https://boards.greenhouse.io/*",
+    "https://jobs.lever.co/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://jobs.ashbyhq.com/*",
+    "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["config.js", "profile.js", "content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["Insightlens.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
