@@ -18,7 +18,8 @@
     "https://jobs.lever.co/*",
     "https://*.myworkdayjobs.com/*",
     "https://jobs.ashbyhq.com/*",
-    "https://*/*"
+    "https://*/*",
+    "https://joblens-production-928c.up.railway.app/*"
   ],
   "content_scripts": [
     {

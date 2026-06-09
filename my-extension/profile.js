@@ -118,12 +118,12 @@ function populateProfileForm(profile) {
   if (!container) return;
   container.innerHTML = "";
 
-  const entries = profile.experience?.length ? profile.experience : [{ title: "", company: "", experience: [] }];
+  const entries = profile.experience?.length ? profile.experience : [{ title: "", company: "", bullets: [] }];
   entries.forEach((exp) => addExperienceEntry(container, exp));
 }
 
 function experienceEntryHtml(exp = {}) {
-  const experience = (exp.experience || []).join("\n");
+  const bullets = (exp.bullets || []).join("\n");
   return `
     <div class="jsp-exp-entry">
       <label class="jsp-field">
@@ -135,8 +135,8 @@ function experienceEntryHtml(exp = {}) {
         <input type="text" class="jsp-exp-company" placeholder="Acme Inc." value="${escapeProfileHtml(exp.company || "")}" />
       </label>
       <label class="jsp-field">
-        <span>Experience</span>
-        <textarea class="jsp-exp-bullets" rows="3" placeholder="Built X using Y&#10;Led team of Z">${escapeProfileHtml(experience)}</textarea>
+        <span>Bullets (one per line)</span>
+        <textarea class="jsp-exp-bullets" rows="3" placeholder="Built X using Y&#10;Led team of Z">${escapeProfileHtml(bullets)}</textarea>
       </label>
       <button type="button" class="jsp-btn-text jsp-remove-exp">Remove</button>
     </div>

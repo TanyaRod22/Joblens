@@ -313,7 +313,7 @@
   border: 1px solid var(--jsp-border);
   border-radius: 12px;
   padding: 14px 16px;
-  margin-bottom: 18px;
+  margin: 18px 0px;
 }
 
 .jsp-job-icon {
@@ -894,13 +894,6 @@
   color: var(--jsp-muted);
 }
 
-.jsp-fit-skills {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 10px;
-}
-
 .jsp-fit-label {
   display: block;
   font-size: 11px;
@@ -925,6 +918,32 @@
   color: #b45309;
   background: #fffbeb;
   border-color: #fde68a;
+}
+
+.jsp-skills-scroll {
+  max-height: 280px;
+  overflow-y: auto;
+  margin-top: 12px;
+  padding-right: 4px;
+}
+
+.jsp-skills-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.jsp-skills-scroll::-webkit-scrollbar-thumb {
+  background: var(--jsp-border);
+  border-radius: 999px;
+}
+
+.jsp-skills-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--jsp-muted);
+}
+
+.jsp-skill-group + .jsp-skill-group {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--jsp-border);
 }
 
 .jsp-action-bar {

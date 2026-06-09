@@ -1,7 +1,7 @@
 // Switch apiBaseUrl to your production backend before publishing.
 // Example: "https://api.yourdomain.com"
-const JOBSCRAPPER_CONFIG = {
-  apiBaseUrl: "http://localhost:8006",
+var JOBSCRAPPER_CONFIG = {
+  apiBaseUrl: "https://joblens-production-928c.up.railway.app",
   endpoints: {
     analyzeJob: "/analyze-job",
     scoreFit: "/score-fit",

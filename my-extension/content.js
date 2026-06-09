@@ -17,28 +17,17 @@ function apiUrl(path) {
 }
 
 async function postJson(path, body) {
-  const response = await fetch(apiUrl(path), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const response = await chrome.runtime.sendMessage({
+    action: "api-json",
+    path,
+    body,
   });
 
-  if (response.status === 429) {
-    throw new Error("RATE_LIMIT");
+  if (!response?.ok) {
+    throw new Error(response?.error || "API request failed");
   }
 
-  if (!response.ok) {
-    let message = `Server responded with ${response.status}`;
-    try {
-      const payload = await response.json();
-      if (payload.detail) message = payload.detail;
-    } catch {
-      // ignore invalid error JSON
-    }
-    throw new Error(message);
-  }
-
-  return response.json();
+  return response.data;
 }
 
 function createFloatingTrigger() {
@@ -114,12 +103,12 @@ function createPanel() {
               <p class="jsp-personalized-badge jsp-hidden" id="jsp-personalized-badge">Personalized to your profile</p>
             </div>
           </div>
+          <div id="jsp-results-sections"></div>
           <div class="jsp-action-bar jsp-hidden" id="jsp-action-bar">
             <button type="button" class="jsp-btn-secondary jsp-action-btn" id="jsp-gen-email">Generate cold email</button>
             <button type="button" class="jsp-btn-secondary jsp-action-btn" id="jsp-gen-letter">Generate cover letter</button>
           </div>
           <div id="jsp-generated-output" class="jsp-hidden"></div>
-          <div id="jsp-results-sections"></div>
         </section>
 
         <section class="jsp-view jsp-profile-view" id="jsp-view-profile">
@@ -279,14 +268,22 @@ function bindPanelEvents() {
   document.getElementById("jsp-add-exp").addEventListener("click", () => {
     addExperienceEntry(document.getElementById("jsp-profile-experience"));
   });
-  document.getElementById("jsp-choice-upload").addEventListener("click", () => setProfileStep("upload"));
+  document.getElementById("jsp-choice-upload").addEventListener("click", () => {
+    setProfileStep("upload", { clearError: true, resetLoading: true });
+  });
   document.getElementById("jsp-choice-manual").addEventListener("click", () => {
     resetProfileForm();
     showProfileForm({ mode: "manual" });
   });
-  document.getElementById("jsp-upload-back").addEventListener("click", () => setProfileStep("choice"));
-  document.getElementById("jsp-form-back").addEventListener("click", () => setProfileStep("choice"));
-  document.getElementById("jsp-replace-resume").addEventListener("click", () => setProfileStep("upload"));
+  document.getElementById("jsp-upload-back").addEventListener("click", () => {
+    setProfileStep("choice", { clearError: true, resetLoading: true });
+  });
+  document.getElementById("jsp-form-back").addEventListener("click", () => {
+    setProfileStep("choice", { clearError: true, resetLoading: true });
+  });
+  document.getElementById("jsp-replace-resume").addEventListener("click", () => {
+    setProfileStep("upload", { clearError: true, resetLoading: true });
+  });
   bindResumeUploadEvents();
   document.getElementById("jsp-gen-email")?.addEventListener("click", handleGenerateColdEmail);
   document.getElementById("jsp-gen-letter")?.addEventListener("click", handleGenerateCoverLetter);
@@ -302,7 +299,8 @@ const PROFILE_STEP_IDS = {
   form: "jsp-profile-form-step",
 };
 
-function setProfileStep(step) {
+function setProfileStep(step, options = {}) {
+  const { clearError = false, resetLoading = false } = options;
   profileStep = step;
   document.querySelectorAll(".jsp-profile-step").forEach((el) => {
     el.classList.remove("jsp-profile-step-active");
@@ -310,8 +308,8 @@ function setProfileStep(step) {
   document.getElementById(PROFILE_STEP_IDS[step])?.classList.add("jsp-profile-step-active");
 
   if (step === "upload") {
-    clearUploadError();
-    setUploadLoading(false);
+    if (clearError) clearUploadError();
+    if (resetLoading) setUploadLoading(false);
   }
 }
 
@@ -353,16 +351,23 @@ function showProfileForm(options = {}) {
 
 async function resolveProfileEntry() {
   const [profile, settings] = await Promise.all([loadProfile(), loadSettings()]);
-  populateProfileForm(profile);
 
   const includeCheckbox = document.getElementById("jsp-include-profile");
   if (includeCheckbox) includeCheckbox.checked = settings.includeProfileInAnalysis;
 
   if (hasProfileContent(profile)) {
+    populateProfileForm(profile);
     showProfileForm({ mode: "edit" });
-  } else {
-    setProfileStep("choice");
+    return;
   }
+
+  // Keep the user on upload/review if they're mid-flow and haven't saved yet.
+  if (profileStep === "upload" || profileStep === "form") {
+    return;
+  }
+
+  populateProfileForm(profile);
+  setProfileStep("choice", { clearError: true, resetLoading: true });
 }
 
 function setTab(tab) {
@@ -441,30 +446,33 @@ function bindResumeUploadEvents() {
 }
 
 async function uploadResumeFile(file) {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  const response = await fetch(apiUrl(ENDPOINTS.parseResume), {
-    method: "POST",
-    body: formData,
+  // ArrayBuffer does not survive sendMessage reliably — send raw bytes instead.
+  const fileBytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+  const response = await chrome.runtime.sendMessage({
+    action: "parse-resume",
+    fileName: file.name,
+    fileType: file.type,
+    fileBytes,
   });
 
-  if (response.status === 429) {
-    throw new Error("RATE_LIMIT");
+  if (!response?.ok) {
+    throw new Error(response?.error || "Failed to parse resume");
   }
 
-  if (!response.ok) {
-    let message = `Server responded with ${response.status}`;
-    try {
-      const payload = await response.json();
-      if (payload.detail) message = payload.detail;
-    } catch {
-      // ignore invalid error JSON
-    }
-    throw new Error(message);
-  }
+  return response.data;
+}
 
-  return response.json();
+function formatUploadError(error) {
+  if (error.message === "RATE_LIMIT") {
+    return "Too many requests. Wait a minute and try again.";
+  }
+  if (error.message.includes("Could not establish connection") || error.message.includes("Receiving end does not exist")) {
+    return "Extension background worker is unavailable. Reload the extension and try again.";
+  }
+  if (error.message.includes("Failed to fetch")) {
+    return `Backend not reachable. Check that the API is running at ${API_BASE}.`;
+  }
+  return error.message;
 }
 
 async function handleResumeUpload(file) {
@@ -476,14 +484,9 @@ async function handleResumeUpload(file) {
     populateProfileForm(parsedProfile);
     showProfileForm({ fromUpload: true });
   } catch (error) {
-    if (error.message === "RATE_LIMIT") {
-      showUploadError("Too many requests. Wait a minute and try again.");
-    } else if (error.message.includes("Failed to fetch")) {
-      showUploadError(`Backend not reachable. Check that the API is running at ${API_BASE}.`);
-    } else {
-      showUploadError(error.message);
-    }
-    setProfileStep("upload");
+    console.error("Resume upload failed:", error);
+    setProfileStep("upload", { resetLoading: true });
+    showUploadError(formatUploadError(error));
   } finally {
     setUploadLoading(false);
   }
@@ -955,11 +958,50 @@ function normalizeSkill(skill) {
   return trimmed.slice(0, 37) + "...";
 }
 
-function renderSkills(items) {
-  if (!items?.length) return "<p class='jsp-text'>None identified.</p>";
+function renderSkills(items, className = "") {
+  if (!items?.length) return "<p class='jsp-text jsp-fit-empty'>None identified</p>";
+  const extraClass = className ? ` ${className}` : "";
   return `<ul class="jsp-skill-list">${items
-    .map((item) => `<li class="jsp-skill-item">${escapeHtml(normalizeSkill(item))}</li>`)
+    .map((item) => `<li class="jsp-skill-item${extraClass}">${escapeHtml(normalizeSkill(item))}</li>`)
     .join("")}</ul>`;
+}
+
+function renderTechnicalSkills(analysis, fitScore, personalized) {
+  const groups = [
+    {
+      label: "Required for this role",
+      items: analysis.technical_skills,
+      className: "",
+    },
+  ];
+
+  if (personalized && fitScore) {
+    groups.push(
+      {
+        label: "Skills you match",
+        items: fitScore.matched_skills,
+        className: "jsp-skill-match",
+      },
+      {
+        label: "Skills missing",
+        items: fitScore.missing_skills,
+        className: "jsp-skill-gap",
+      }
+    );
+  }
+
+  const content = groups
+    .map(
+      (group) => `
+      <div class="jsp-skill-group">
+        <span class="jsp-fit-label">${escapeHtml(group.label)}</span>
+        ${renderSkills(group.items, group.className)}
+      </div>
+    `
+    )
+    .join("");
+
+  return `<div class="jsp-skills-scroll">${content}</div>`;
 }
 
 function renderNumberedList(items) {
@@ -1020,24 +1062,7 @@ function renderFitCard(fitScore) {
         <p>${escapeHtml(fitScore.summary)}</p>
       </div>
     </div>
-    <div class="jsp-fit-skills">
-      <div>
-        <span class="jsp-fit-label">Matched</span>
-        ${renderSkillPills(fitScore.matched_skills, "jsp-skill-match")}
-      </div>
-      <div>
-        <span class="jsp-fit-label">Gaps</span>
-        ${renderSkillPills(fitScore.missing_skills, "jsp-skill-gap")}
-      </div>
-    </div>
   `;
-}
-
-function renderSkillPills(items, className) {
-  if (!items?.length) return `<p class="jsp-text jsp-fit-empty">None identified</p>`;
-  return `<ul class="jsp-skill-list">${items
-    .map((item) => `<li class="jsp-skill-item ${className}">${escapeHtml(normalizeSkill(item))}</li>`)
-    .join("")}</ul>`;
 }
 
 function renderImprovementsSection(suggestions) {
@@ -1091,7 +1116,7 @@ function renderResults(job, analysis, options = {}) {
 
   const sections = [
     renderSection("Role Requirements", renderListItems(analysis.role_requirements), true),
-    renderSection("Technical Skills", renderSkills(analysis.technical_skills)),
+    renderSection("Technical Skills", renderTechnicalSkills(analysis, fitScore, personalized)),
     renderSection("Why This Role", `<p class="jsp-text">${escapeHtml(analysis.why_role)}</p>`),
     renderSection("Why This Company", `<p class="jsp-text">${escapeHtml(analysis.why_company)}</p>`),
     renderSection(
