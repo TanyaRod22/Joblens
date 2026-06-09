@@ -22,6 +22,5 @@ yarn-error.*
 .env*.local
 
 
-app-example
 __pycache__/
 *.pyc
