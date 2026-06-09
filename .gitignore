@@ -1,9 +1,27 @@
-.env
-**/.env
-.env*.local
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
+# dependencies
 node_modules/
 
 .cursor/
 .vscode/
 .venv/
+
+.env
+**/.env
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# local env files
+.env*.local
+
+
+app-example
+__pycache__/
+*.pyc
