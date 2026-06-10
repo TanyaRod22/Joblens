@@ -92,7 +92,7 @@ function profileFromForm(form) {
     summary: form.querySelector("#jsp-profile-summary")?.value.trim() || "",
     skills: parseCommaList(form.querySelector("#jsp-profile-skills")?.value || ""),
     experience,
-    resume_text: form.querySelector("#jsp-profile-resume")?.value.trim() || "",
+    resume_text: "",
     preferences: {
       target_roles: parseCommaList(form.querySelector("#jsp-profile-roles")?.value || ""),
       industries: parseCommaList(form.querySelector("#jsp-profile-industries")?.value || ""),
@@ -110,7 +110,6 @@ function populateProfileForm(profile) {
   setValue("jsp-profile-headline", profile.headline);
   setValue("jsp-profile-summary", profile.summary);
   setValue("jsp-profile-skills", (profile.skills || []).join(", "));
-  // setValue("jsp-profile-resume", profile.resume_text);
   setValue("jsp-profile-roles", (profile.preferences?.target_roles || []).join(", "));
   setValue("jsp-profile-industries", (profile.preferences?.industries || []).join(", "));
 

@@ -752,14 +752,20 @@
 .jsp-profile-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .jsp-profile-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin: 10px 0;
+  gap: 12px;
+  margin: 4px 0 0;
+}
+
+#jsp-profile-experience {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .jsp-profile-section-header {
@@ -774,11 +780,15 @@
 .jsp-exp-entry {
   border: 1px solid var(--jsp-border);
   border-radius: 10px;
-  padding: 12px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   background: var(--jsp-surface);
+}
+
+.jsp-exp-entry .jsp-remove-exp {
+  margin-top: 2px;
 }
 
 .jsp-btn-text {
@@ -803,6 +813,7 @@
   font-size: 13px;
   color: var(--jsp-text);
   cursor: pointer;
+  margin-top: 4px;
 }
 
 .jsp-toggle-field input {
@@ -852,11 +863,16 @@
 
 .jsp-fit-score {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 16px;
   border: 1px solid var(--jsp-border);
+}
+
+.jsp-fit-details {
+  flex: 1;
+  min-width: 0;
 }
 
 .jsp-fit-high {

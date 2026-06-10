@@ -188,10 +188,6 @@ function createPanel() {
                 <div id="jsp-profile-experience"></div>
               </div>
               <label class="jsp-field">
-                <span>Resume text (paste full resume)</span>
-                <textarea id="jsp-profile-resume" rows="6" placeholder="Or paste your full resume here..."></textarea>
-              </label>
-              <label class="jsp-field">
                 <span>Target roles (comma-separated)</span>
                 <input type="text" id="jsp-profile-roles" placeholder="Frontend, Full-stack" />
               </label>
@@ -496,7 +492,11 @@ async function handleResumeUpload(file) {
 async function saveProfileForm(event) {
   event.preventDefault();
   const form = document.getElementById("jsp-profile-form");
+  const existing = await loadProfile();
   const profile = profileFromForm(form);
+  if (!profile.resume_text && existing.resume_text) {
+    profile.resume_text = existing.resume_text;
+  }
   const settings = {
     includeProfileInAnalysis: document.getElementById("jsp-include-profile").checked,
   };

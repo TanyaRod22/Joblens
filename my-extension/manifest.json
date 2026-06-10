@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Joblens",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Analyze job postings and get personalized interview prep, fit scores, and outreach drafts for your job search.",
   "homepage_url": "https://joblens-production-928c.up.railway.app/privacy",
   "action": {
