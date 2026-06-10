@@ -158,7 +158,7 @@ function createPanel() {
             </div>
             <div class="jsp-profile-intro">
               <h2 id="jsp-profile-form-title">Your profile</h2>
-              <p id="jsp-profile-form-subtitle">Save your resume once. Joblens personalizes analysis, fit scores, and outreach drafts to your background.</p>
+              <p id="jsp-profile-form-subtitle">Once you save your profile, Joblens generates a personalized analysis, fit scores, and outreach drafts based on your background.</p>
             </div>
             <div id="jsp-profile-verify-banner" class="jsp-profile-verify-banner jsp-hidden">
               Review the details we pulled from your resume, then save.
@@ -203,9 +203,10 @@ function createPanel() {
                 <input type="checkbox" id="jsp-include-profile" checked />
                 <span>Include my profile in analysis</span>
               </label>
-              <p class="jsp-privacy-note">
-                Profile data is stored locally in your browser. When analysis or drafts are generated, relevant profile text is sent to the Joblens backend and OpenAI. You can turn this off anytime.
-              </p>
+            <p class="jsp-privacy-note">
+              Profile data is stored locally in your browser. When analysis or drafts are generated, relevant profile text is sent to the Joblens backend and OpenAI.
+              <a class="jsp-privacy-link" href="${API_BASE}/privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a>
+            </p>
               <button type="submit" class="jsp-btn-primary" id="jsp-save-profile">Save profile</button>
               <p class="jsp-save-status jsp-hidden" id="jsp-save-status" role="status"></p>
             </form>
@@ -646,6 +647,16 @@ function getJsonLdJobPosting() {
   return null;
 }
 
+function formatAddressPart(value) {
+  if (value == null) return null;
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "object") {
+    const text = value.name || value.addressCountry || value.addressRegion || value.addressLocality;
+    return typeof text === "string" ? text.trim() || null : null;
+  }
+  return String(value).trim() || null;
+}
+
 function parseLocationFromJsonLd(jobLocation) {
   if (!jobLocation) return null;
   if (typeof jobLocation === "string") return jobLocation;
@@ -655,12 +666,15 @@ function parseLocationFromJsonLd(jobLocation) {
     const address = loc?.address;
     if (typeof address === "string") return address;
     if (address) {
-      const parts = [address.addressLocality, address.addressRegion, address.addressCountry]
-        .filter(Boolean)
-        .join(", ");
-      if (parts) return parts;
+      const parts = [
+        formatAddressPart(address.addressLocality),
+        formatAddressPart(address.addressRegion),
+        formatAddressPart(address.addressCountry),
+      ].filter(Boolean);
+      if (parts.length) return parts.join(", ");
     }
-    if (loc?.name) return loc.name;
+    const locationName = formatAddressPart(loc?.name);
+    if (locationName) return locationName;
   }
   return null;
 }

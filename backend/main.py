@@ -1,8 +1,10 @@
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 from openai_client import (
     analyze_job,
@@ -64,9 +66,17 @@ def _validate_description(description: str) -> None:
         )
 
 
+PRIVACY_POLICY_PATH = Path(__file__).parent / "privacy_policy.html"
+
+
 @router.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@router.get("/privacy", response_class=HTMLResponse)
+async def privacy_policy():
+    return PRIVACY_POLICY_PATH.read_text(encoding="utf-8")
 
 
 @router.post("/analyze-job", response_model=JobResponse)

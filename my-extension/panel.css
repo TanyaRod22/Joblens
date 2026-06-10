@@ -759,6 +759,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin: 10px 0;
 }
 
 .jsp-profile-section-header {
@@ -817,6 +818,18 @@
   border: 1px solid var(--jsp-border);
   border-radius: 8px;
   padding: 10px 12px;
+}
+
+.jsp-privacy-link {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--jsp-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.jsp-privacy-link:hover {
+  text-decoration: underline;
 }
 
 .jsp-save-status {

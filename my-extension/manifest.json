@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Joblens",
-  "version": "1.0",
-  "description": "A browser extension that helps you understand roles and responsibilites in depth such that you can better represent yourself in a job interview or via a cold email.",
+  "version": "1.0.1",
+  "description": "Analyze job postings and get personalized interview prep, fit scores, and outreach drafts for your job search.",
+  "homepage_url": "https://joblens-production-928c.up.railway.app/privacy",
   "action": {
     "default_icon": "Insightlens.png",
     "default_title": "Joblens"
@@ -12,18 +13,19 @@
   },
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
-    "http://localhost:8006/*",
-    "https://www.linkedin.com/*",
-    "https://boards.greenhouse.io/*",
-    "https://jobs.lever.co/*",
-    "https://*.myworkdayjobs.com/*",
-    "https://jobs.ashbyhq.com/*",
-    "https://*/*",
     "https://joblens-production-928c.up.railway.app/*"
   ],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "https://www.linkedin.com/*",
+        "https://boards.greenhouse.io/*",
+        "https://jobs.lever.co/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://jobs.ashbyhq.com/*",
+        "https://www.indeed.com/*",
+        "https://*.notion.site/*"
+      ],
       "js": ["config.js", "profile.js", "content.js"],
       "css": ["panel.css"],
       "run_at": "document_idle"
@@ -32,7 +34,15 @@
   "web_accessible_resources": [
     {
       "resources": ["Insightlens.png"],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "https://www.linkedin.com/*",
+        "https://boards.greenhouse.io/*",
+        "https://jobs.lever.co/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://jobs.ashbyhq.com/*",
+        "https://www.indeed.com/*",
+        "https://*.notion.site/*"
+      ]
     }
   ]
 }
