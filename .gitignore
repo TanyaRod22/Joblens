@@ -21,6 +21,9 @@ yarn-error.*
 # local env files
 .env*.local
 
+.DS_Store
+.dockerignore
 
+# python
 __pycache__/
 *.pyc
