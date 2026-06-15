@@ -22,7 +22,7 @@ yarn-error.*
 .env*.local
 
 .DS_Store
-.dockerignore
+.dockerignore*
 
 # python
 __pycache__/
