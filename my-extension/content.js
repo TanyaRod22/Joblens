@@ -56,11 +56,11 @@ function createPanel() {
   root.id = ROOT_ID;
   root.innerHTML = `
     <div id="jobscrapper-backdrop"></div>
-    <aside id="${PANEL_ID}" role="dialog" aria-label="JobScrapper">
+    <aside id="${PANEL_ID}" role="dialog" aria-label="Joblens">
       <header class="jsp-header">
         <div class="jsp-brand">
           <img class="jsp-logo-img" src="${EXTENSION_ICON_URL}" alt="" />
-          <h1 class="jsp-title">JobScrapper</h1>
+          <h1 class="jsp-title">Joblens</h1>
         </div>
         <div class="jsp-header-actions">
           <button type="button" class="jsp-btn-secondary jsp-hidden" id="jsp-rescan">Rescan</button>
@@ -165,19 +165,19 @@ function createPanel() {
             </div>
             <form id="jsp-profile-form" class="jsp-profile-form">
               <label class="jsp-field">
-                <span>Name</span>
+                <span class="jsp-profile-form-label">Name</span>
                 <input type="text" id="jsp-profile-name" placeholder="Jane Doe" />
               </label>
               <label class="jsp-field">
-                <span>Headline</span>
+                <span class="jsp-profile-form-label">Headline</span>
                 <input type="text" id="jsp-profile-headline" placeholder="Senior Frontend Engineer" />
               </label>
               <label class="jsp-field">
-                <span>Summary</span>
+                <span class="jsp-profile-form-label">Summary</span>
                 <textarea id="jsp-profile-summary" rows="3" placeholder="2–3 sentence pitch about your experience and goals"></textarea>
               </label>
               <label class="jsp-field">
-                <span>Skills (comma-separated)</span>
+                <span class="jsp-profile-form-label">Skills (comma-separated)</span>
                 <input type="text" id="jsp-profile-skills" placeholder="React, TypeScript, Node.js" />
               </label>
               <div class="jsp-profile-section">
@@ -188,11 +188,11 @@ function createPanel() {
                 <div id="jsp-profile-experience"></div>
               </div>
               <label class="jsp-field">
-                <span>Target roles (comma-separated)</span>
+                <span class="jsp-profile-form-label">Target roles (comma-separated)</span>
                 <input type="text" id="jsp-profile-roles" placeholder="Frontend, Full-stack" />
               </label>
               <label class="jsp-field">
-                <span>Target industries (comma-separated)</span>
+                <span class="jsp-profile-form-label">Target industries (comma-separated)</span>
                 <input type="text" id="jsp-profile-industries" placeholder="Healthcare, Fintech" />
               </label>
               <label class="jsp-toggle-field">
@@ -1072,8 +1072,8 @@ function renderFitCard(fitScore) {
     <div class="jsp-fit-score ${scoreClass}">
       <span class="jsp-fit-number">${fitScore.score}</span>
       <div class="jsp-fit-details">
-        <strong>Resume fit</strong>
-        <p>${escapeHtml(fitScore.summary)}</p>
+        <strong class="jsp-profile-form-label">Resume fit</strong>
+        <p class="jsp-fit-summary">${escapeHtml(fitScore.summary)}</p>
       </div>
     </div>
   `;

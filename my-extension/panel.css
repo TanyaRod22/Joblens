@@ -777,6 +777,13 @@
   color: var(--jsp-text);
 }
 
+.jsp-profile-form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--jsp-text);
+  margin: 10px 0;
+}
+
 .jsp-exp-entry {
   border: 1px solid var(--jsp-border);
   border-radius: 10px;
@@ -895,6 +902,7 @@
   font-weight: 700;
   line-height: 1;
   min-width: 44px;
+  margin: 10px 0;
 }
 
 .jsp-fit-high .jsp-fit-number {
@@ -917,7 +925,7 @@
 }
 
 .jsp-fit-details p {
-  margin: 0;
+  margin: 10px 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--jsp-muted);
@@ -930,7 +938,6 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--jsp-muted);
-  margin-bottom: 6px;
 }
 
 .jsp-fit-empty {

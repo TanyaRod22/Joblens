@@ -126,15 +126,15 @@ function experienceEntryHtml(exp = {}) {
   return `
     <div class="jsp-exp-entry">
       <label class="jsp-field">
-        <span>Title</span>
+        <span class="jsp-profile-form-label">Title</span>
         <input type="text" class="jsp-exp-title" placeholder="Senior Frontend Engineer" value="${escapeProfileHtml(exp.title || "")}" />
       </label>
       <label class="jsp-field">
-        <span>Company</span>
+        <span class="jsp-profile-form-label">Company</span>
         <input type="text" class="jsp-exp-company" placeholder="Acme Inc." value="${escapeProfileHtml(exp.company || "")}" />
       </label>
       <label class="jsp-field">
-        <span>Bullets (one per line)</span>
+        <span class="jsp-profile-form-label">Bullets (one per line)</span>
         <textarea class="jsp-exp-bullets" rows="3" placeholder="Built X using Y&#10;Led team of Z">${escapeProfileHtml(bullets)}</textarea>
       </label>
       <button type="button" class="jsp-btn-text jsp-remove-exp">Remove</button>
