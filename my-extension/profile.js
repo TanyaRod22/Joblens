@@ -1,5 +1,6 @@
 const PROFILE_STORAGE_KEY = "joblens_profile";
 const SETTINGS_STORAGE_KEY = "joblens_settings";
+const TAILORED_DRAFTS_KEY = "joblens_tailored_drafts";
 
 const DEFAULT_PROFILE = {
   name: "",
@@ -39,32 +40,212 @@ function hasProfileContent(profile) {
   );
 }
 
-function loadProfile() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get([PROFILE_STORAGE_KEY], (result) => {
-      resolve({ ...DEFAULT_PROFILE, ...(result[PROFILE_STORAGE_KEY] || {}) });
-    });
+function cloneProfile(profile) {
+  return JSON.parse(JSON.stringify(profile || DEFAULT_PROFILE));
+}
+
+function getLocalStorageArea() {
+  try {
+    const area = globalThis.chrome?.storage?.local;
+    if (!area) {
+      throw new Error("EXTENSION_CONTEXT_INVALIDATED");
+    }
+    return area;
+  } catch (error) {
+    if (String(error?.message || "").includes("EXTENSION_CONTEXT_INVALIDATED")) {
+      throw new Error("EXTENSION_CONTEXT_INVALIDATED");
+    }
+    // Chrome throws when the extension was reloaded and this page's old content script is stale.
+    throw new Error("EXTENSION_CONTEXT_INVALIDATED");
+  }
+}
+
+function storageGet(keys) {
+  return new Promise((resolve, reject) => {
+    try {
+      getLocalStorageArea().get(keys, (result) => {
+        const err = chrome.runtime?.lastError;
+        if (err) {
+          reject(new Error(err.message || "EXTENSION_CONTEXT_INVALIDATED"));
+          return;
+        }
+        resolve(result || {});
+      });
+    } catch (error) {
+      reject(error);
+    }
   });
+}
+
+function storageSet(values) {
+  return new Promise((resolve, reject) => {
+    try {
+      getLocalStorageArea().set(values, () => {
+        const err = chrome.runtime?.lastError;
+        if (err) {
+          reject(new Error(err.message || "EXTENSION_CONTEXT_INVALIDATED"));
+          return;
+        }
+        resolve();
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function storageRemove(keys) {
+  return new Promise((resolve, reject) => {
+    try {
+      getLocalStorageArea().remove(keys, () => {
+        const err = chrome.runtime?.lastError;
+        if (err) {
+          reject(new Error(err.message || "EXTENSION_CONTEXT_INVALIDATED"));
+          return;
+        }
+        resolve();
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function loadProfile() {
+  return storageGet([PROFILE_STORAGE_KEY]).then((result) => ({
+    ...DEFAULT_PROFILE,
+    ...(result[PROFILE_STORAGE_KEY] || {}),
+  }));
 }
 
 function saveProfile(profile) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [PROFILE_STORAGE_KEY]: profile }, resolve);
-  });
+  return storageSet({ [PROFILE_STORAGE_KEY]: profile });
+}
+
+function deleteProfile() {
+  return storageRemove([PROFILE_STORAGE_KEY]);
+}
+
+function deleteAllUserData() {
+  return storageRemove([PROFILE_STORAGE_KEY, SETTINGS_STORAGE_KEY, TAILORED_DRAFTS_KEY]);
 }
 
 function loadSettings() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get([SETTINGS_STORAGE_KEY], (result) => {
-      resolve({ ...DEFAULT_SETTINGS, ...(result[SETTINGS_STORAGE_KEY] || {}) });
-    });
-  });
+  return storageGet([SETTINGS_STORAGE_KEY]).then((result) => ({
+    ...DEFAULT_SETTINGS,
+    ...(result[SETTINGS_STORAGE_KEY] || {}),
+  }));
 }
 
 function saveSettings(settings) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: settings }, resolve);
-  });
+  return storageSet({ [SETTINGS_STORAGE_KEY]: settings });
+}
+
+function loadTailoredDrafts() {
+  return storageGet([TAILORED_DRAFTS_KEY]).then((result) => result[TAILORED_DRAFTS_KEY] || {});
+}
+
+function saveTailoredDrafts(drafts) {
+  return storageSet({ [TAILORED_DRAFTS_KEY]: drafts });
+}
+
+async function getTailoredDraft(jobUrl) {
+  const drafts = await loadTailoredDrafts();
+  return drafts[jobUrl] || null;
+}
+
+async function saveTailoredDraft(jobUrl, draft) {
+  const drafts = await loadTailoredDrafts();
+  drafts[jobUrl] = draft;
+  await saveTailoredDrafts(drafts);
+  return draft;
+}
+
+function createSuggestionId(index) {
+  return `sug-${index}-${Date.now()}`;
+}
+
+function normalizeSuggestions(suggestions = []) {
+  return suggestions.map((item, index) => ({
+    id: item.id || createSuggestionId(index),
+    original: item.original || "",
+    suggested: item.suggested || "",
+    rationale: item.rationale || "",
+    experience_index:
+      typeof item.experience_index === "number" ? item.experience_index : null,
+    bullet_index: typeof item.bullet_index === "number" ? item.bullet_index : null,
+    is_new_bullet: Boolean(item.is_new_bullet),
+    status: item.status || "pending",
+  }));
+}
+
+function applySuggestionToProfile(profile, suggestion, editedText) {
+  const next = cloneProfile(profile);
+  const text = (editedText || suggestion.suggested || "").trim();
+  if (!text) return next;
+
+  if (!Array.isArray(next.experience)) next.experience = [];
+
+  const expIndex =
+    typeof suggestion.experience_index === "number" ? suggestion.experience_index : 0;
+
+  while (next.experience.length <= expIndex) {
+    next.experience.push({ title: "", company: "", bullets: [] });
+  }
+
+  const entry = next.experience[expIndex];
+  if (!Array.isArray(entry.bullets)) entry.bullets = [];
+
+  if (
+    !suggestion.is_new_bullet &&
+    typeof suggestion.bullet_index === "number" &&
+    suggestion.bullet_index >= 0 &&
+    suggestion.bullet_index < entry.bullets.length
+  ) {
+    entry.bullets[suggestion.bullet_index] = text;
+  } else if (!suggestion.is_new_bullet && suggestion.original) {
+    const matchIndex = entry.bullets.findIndex(
+      (bullet) => bullet.trim() === suggestion.original.trim()
+    );
+    if (matchIndex >= 0) {
+      entry.bullets[matchIndex] = text;
+    } else {
+      entry.bullets.push(text);
+    }
+  } else {
+    entry.bullets.push(text);
+  }
+
+  return next;
+}
+
+function profileToResumeText(profile) {
+  const lines = [];
+  if (profile.name) lines.push(profile.name);
+  if (profile.headline) lines.push(profile.headline);
+  if (profile.summary) {
+    lines.push("");
+    lines.push("SUMMARY");
+    lines.push(profile.summary);
+  }
+  if (profile.skills?.length) {
+    lines.push("");
+    lines.push("SKILLS");
+    lines.push(profile.skills.join(", "));
+  }
+  if (profile.experience?.length) {
+    lines.push("");
+    lines.push("EXPERIENCE");
+    profile.experience.forEach((exp) => {
+      const header = [exp.title, exp.company].filter(Boolean).join(" — ");
+      if (header) lines.push("");
+      if (header) lines.push(header);
+      (exp.bullets || []).forEach((bullet) => {
+        lines.push(`• ${bullet}`);
+      });
+    });
+  }
+  return lines.join("\n").trim();
 }
 
 function profileFromForm(form) {

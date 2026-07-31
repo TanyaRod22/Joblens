@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Joblens",
-  "version": "1.0.2",
+  "version": "1.0.5",
   "description": "Analyze job postings and get personalized interview prep, fit scores, and outreach drafts for your job search.",
   "homepage_url": "https://joblens-production-928c.up.railway.app/privacy",
   "action": {
     "default_icon": "Insightlens.png",
-    "default_title": "Joblens"
+    "default_title": "Joblens",
+    "default_popup": "popup.html"
   },
   "background": {
     "service_worker": "background.js"
@@ -23,6 +24,7 @@
         "https://jobs.lever.co/*",
         "https://*.myworkdayjobs.com/*",
         "https://jobs.ashbyhq.com/*",
+        "https://www.ashbyhq.com/*",
         "https://www.indeed.com/*",
         "https://*.notion.site/*"
       ],
@@ -40,6 +42,7 @@
         "https://jobs.lever.co/*",
         "https://*.myworkdayjobs.com/*",
         "https://jobs.ashbyhq.com/*",
+        "https://www.ashbyhq.com/*",
         "https://www.indeed.com/*",
         "https://*.notion.site/*"
       ]

@@ -10,7 +10,18 @@ let lastScanView = "jsp-view-idle";
 let currentJob = null;
 let currentAnalysis = null;
 let currentFitScore = null;
+let currentTailoredDraft = null;
 let profileStep = "choice";
+let prepMessages = [];
+let prepSending = false;
+let uiMounted = false;
+
+const PREP_SUGGESTIONS = [
+  "What interests you about this role?",
+  "Why this company?",
+  "Tell me about yourself for this role",
+  "Walk me through your relevant experience",
+];
 
 function apiUrl(path) {
   return `${API_BASE}${path}`;
@@ -31,7 +42,11 @@ async function postJson(path, body) {
 }
 
 function createFloatingTrigger() {
-  if (document.getElementById(FAB_ID)) return;
+  const existing = document.getElementById(FAB_ID);
+  if (existing && uiMounted) return;
+
+  // Stale FAB from a previous extension injection — replace so clicks work again.
+  existing?.remove();
 
   const fab = document.createElement("button");
   fab.id = FAB_ID;
@@ -50,7 +65,11 @@ function setFabVisible(visible) {
 }
 
 function createPanel() {
-  if (document.getElementById(ROOT_ID)) return;
+  const existing = document.getElementById(ROOT_ID);
+  if (existing && uiMounted) return;
+
+  // Stale panel from a previous extension injection — recreate with live handlers.
+  existing?.remove();
 
   const root = document.createElement("div");
   root.id = ROOT_ID;
@@ -70,6 +89,8 @@ function createPanel() {
 
       <nav class="jsp-tabs" aria-label="Panel sections">
         <button type="button" class="jsp-tab jsp-tab-active" data-tab="scan">Scan</button>
+        <button type="button" class="jsp-tab" data-tab="prep">Prep</button>
+        <button type="button" class="jsp-tab" data-tab="improve">Improve</button>
         <button type="button" class="jsp-tab" data-tab="profile">Profile</button>
       </nav>
 
@@ -109,6 +130,44 @@ function createPanel() {
             <button type="button" class="jsp-btn-secondary jsp-action-btn" id="jsp-gen-letter">Generate cover letter</button>
           </div>
           <div id="jsp-generated-output" class="jsp-hidden"></div>
+        </section>
+
+        <section class="jsp-view jsp-improve-view" id="jsp-view-improve">
+          <div class="jsp-improve-intro">
+            <h2>Resume improvements</h2>
+            <p id="jsp-improve-subtitle">Scan a job with your profile included to get tailored bullet suggestions.</p>
+          </div>
+          <p id="jsp-improve-job-meta" class="jsp-improve-job-meta jsp-hidden"></p>
+          <div id="jsp-improve-content"></div>
+        </section>
+
+        <section class="jsp-view jsp-prep-view" id="jsp-view-prep">
+          <div class="jsp-prep-intro">
+            <h2>Interview prep</h2>
+            <p>Get structured answers for common questions, then refine them in chat.</p>
+          </div>
+          <p id="jsp-prep-job-meta" class="jsp-improve-job-meta jsp-hidden"></p>
+          <div id="jsp-prep-empty" class="jsp-prep-empty">
+            <p>Scan a job first so Prep can ground answers in the posting.</p>
+            <button type="button" class="jsp-btn-primary" id="jsp-prep-goto-scan">Go to Scan</button>
+          </div>
+          <div id="jsp-prep-chat" class="jsp-prep-chat jsp-hidden">
+            <div id="jsp-prep-messages" class="jsp-prep-messages" aria-live="polite"></div>
+            <div id="jsp-prep-suggestions" class="jsp-prep-suggestions"></div>
+            <form id="jsp-prep-form" class="jsp-prep-form">
+              <textarea
+                id="jsp-prep-input"
+                rows="2"
+                placeholder="Ask a question or request a rewrite..."
+                maxlength="2000"
+              ></textarea>
+              <div class="jsp-prep-form-actions">
+                <button type="button" class="jsp-btn-text" id="jsp-prep-clear">Clear chat</button>
+                <button type="submit" class="jsp-btn-primary" id="jsp-prep-send">Send</button>
+              </div>
+            </form>
+            <p id="jsp-prep-status" class="jsp-prep-status jsp-hidden" role="status"></p>
+          </div>
         </section>
 
         <section class="jsp-view jsp-profile-view" id="jsp-view-profile">
@@ -204,6 +263,7 @@ function createPanel() {
               <a class="jsp-privacy-link" href="${API_BASE}/privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a>
             </p>
               <button type="submit" class="jsp-btn-primary" id="jsp-save-profile">Save profile</button>
+              <button type="button" class="jsp-btn-danger-text jsp-hidden" id="jsp-delete-profile">Delete profile</button>
               <p class="jsp-save-status jsp-hidden" id="jsp-save-status" role="status"></p>
             </form>
           </div>
@@ -248,6 +308,7 @@ function createPanel() {
 
   document.body.appendChild(root);
   bindPanelEvents();
+  uiMounted = true;
 }
 
 function bindPanelEvents() {
@@ -262,6 +323,7 @@ function bindPanelEvents() {
     tab.addEventListener("click", () => setTab(tab.dataset.tab));
   });
   document.getElementById("jsp-profile-form").addEventListener("submit", saveProfileForm);
+  document.getElementById("jsp-delete-profile").addEventListener("click", handleDeleteProfile);
   document.getElementById("jsp-add-exp").addEventListener("click", () => {
     addExperienceEntry(document.getElementById("jsp-profile-experience"));
   });
@@ -282,8 +344,17 @@ function bindPanelEvents() {
     setProfileStep("upload", { clearError: true, resetLoading: true });
   });
   bindResumeUploadEvents();
-  document.getElementById("jsp-gen-email")?.addEventListener("click", handleGenerateColdEmail);
-  document.getElementById("jsp-gen-letter")?.addEventListener("click", handleGenerateCoverLetter);
+  document.getElementById("jsp-gen-email")?.addEventListener("click", () => handleGenerateColdEmail());
+  document.getElementById("jsp-gen-letter")?.addEventListener("click", () => handleGenerateCoverLetter());
+  document.getElementById("jsp-prep-form")?.addEventListener("submit", (event) => handlePrepSubmit(event));
+  document.getElementById("jsp-prep-clear")?.addEventListener("click", () => clearPrepChat());
+  document.getElementById("jsp-prep-goto-scan")?.addEventListener("click", () => setTab("scan"));
+  document.getElementById("jsp-prep-input")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      document.getElementById("jsp-prep-form")?.requestSubmit();
+    }
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closePanel();
   });
@@ -319,6 +390,7 @@ function showProfileForm(options = {}) {
   const formSubtitle = document.getElementById("jsp-profile-form-subtitle");
   const backBtn = document.getElementById("jsp-form-back");
   const replaceBtn = document.getElementById("jsp-replace-resume");
+  const deleteBtn = document.getElementById("jsp-delete-profile");
 
   if (fromUpload) {
     verifyBanner.classList.remove("jsp-hidden");
@@ -326,6 +398,7 @@ function showProfileForm(options = {}) {
     formSubtitle.textContent = "We pulled these details from your resume. Edit anything before saving.";
     backBtn.classList.remove("jsp-hidden");
     replaceBtn.classList.add("jsp-hidden");
+    deleteBtn.classList.add("jsp-hidden");
     return;
   }
 
@@ -336,6 +409,7 @@ function showProfileForm(options = {}) {
     formSubtitle.textContent = "Add your experience and skills so Joblens can personalize your job analysis.";
     backBtn.classList.remove("jsp-hidden");
     replaceBtn.classList.add("jsp-hidden");
+    deleteBtn.classList.add("jsp-hidden");
     return;
   }
 
@@ -344,27 +418,67 @@ function showProfileForm(options = {}) {
     "Save your resume once. Joblens personalizes analysis, fit scores, and outreach drafts to your background.";
   backBtn.classList.add("jsp-hidden");
   replaceBtn.classList.remove("jsp-hidden");
+  deleteBtn.classList.remove("jsp-hidden");
+}
+
+async function handleDeleteProfile() {
+  const confirmed = window.confirm(
+    "Delete your saved profile and tailored resume drafts from this browser? This cannot be undone."
+  );
+  if (!confirmed) return;
+
+  try {
+    await deleteAllUserData();
+    resetProfileForm();
+    currentTailoredDraft = null;
+
+    const includeCheckbox = document.getElementById("jsp-include-profile");
+    if (includeCheckbox) includeCheckbox.checked = true;
+
+    const status = document.getElementById("jsp-save-status");
+    if (status) {
+      status.textContent = "Profile deleted.";
+      status.classList.remove("jsp-hidden");
+      window.setTimeout(() => status.classList.add("jsp-hidden"), 2500);
+    }
+
+    setProfileStep("choice", { clearError: true, resetLoading: true });
+  } catch (error) {
+    if (isExtensionContextError(error)) {
+      showExtensionReloadNeeded();
+      return;
+    }
+    showError("Couldn't delete profile", error.message || "Try again.");
+  }
 }
 
 async function resolveProfileEntry() {
-  const [profile, settings] = await Promise.all([loadProfile(), loadSettings()]);
+  try {
+    const [profile, settings] = await Promise.all([loadProfile(), loadSettings()]);
 
-  const includeCheckbox = document.getElementById("jsp-include-profile");
-  if (includeCheckbox) includeCheckbox.checked = settings.includeProfileInAnalysis;
+    const includeCheckbox = document.getElementById("jsp-include-profile");
+    if (includeCheckbox) includeCheckbox.checked = settings.includeProfileInAnalysis;
 
-  if (hasProfileContent(profile)) {
+    if (hasProfileContent(profile)) {
+      populateProfileForm(profile);
+      showProfileForm({ mode: "edit" });
+      return;
+    }
+
+    // Keep the user on upload/review if they're mid-flow and haven't saved yet.
+    if (profileStep === "upload" || profileStep === "form") {
+      return;
+    }
+
     populateProfileForm(profile);
-    showProfileForm({ mode: "edit" });
-    return;
+    setProfileStep("choice", { clearError: true, resetLoading: true });
+  } catch (error) {
+    if (isExtensionContextError(error)) {
+      showExtensionReloadNeeded();
+      return;
+    }
+    throw error;
   }
-
-  // Keep the user on upload/review if they're mid-flow and haven't saved yet.
-  if (profileStep === "upload" || profileStep === "form") {
-    return;
-  }
-
-  populateProfileForm(profile);
-  setProfileStep("choice", { clearError: true, resetLoading: true });
 }
 
 function setTab(tab) {
@@ -373,25 +487,33 @@ function setTab(tab) {
     el.classList.toggle("jsp-tab-active", el.dataset.tab === tab);
   });
 
-  const scanViews = document.querySelectorAll(
-    ".jsp-view:not(#jsp-view-profile)"
-  );
-  const profileView = document.getElementById("jsp-view-profile");
+  document.querySelectorAll(".jsp-view").forEach((el) => el.classList.remove("jsp-active"));
+  document.getElementById("jsp-rescan")?.classList.add("jsp-hidden");
 
   if (tab === "profile") {
-    scanViews.forEach((el) => el.classList.remove("jsp-active"));
-    profileView.classList.add("jsp-active");
-    document.getElementById("jsp-rescan").classList.add("jsp-hidden");
+    document.getElementById("jsp-view-profile")?.classList.add("jsp-active");
     resolveProfileEntry();
     return;
   }
 
-  profileView.classList.remove("jsp-active");
+  if (tab === "improve") {
+    document.getElementById("jsp-view-improve")?.classList.add("jsp-active");
+    renderImprovePanel();
+    return;
+  }
+
+  if (tab === "prep") {
+    document.getElementById("jsp-view-prep")?.classList.add("jsp-active");
+    renderPrepPanel();
+    return;
+  }
+
   setView(lastScanView);
 }
 
 async function initProfileView() {
   await resolveProfileEntry();
+  renderImprovePanel();
 }
 
 function clearUploadError() {
@@ -491,24 +613,32 @@ async function handleResumeUpload(file) {
 
 async function saveProfileForm(event) {
   event.preventDefault();
-  const form = document.getElementById("jsp-profile-form");
-  const existing = await loadProfile();
-  const profile = profileFromForm(form);
-  if (!profile.resume_text && existing.resume_text) {
-    profile.resume_text = existing.resume_text;
+  try {
+    const form = document.getElementById("jsp-profile-form");
+    const existing = await loadProfile();
+    const profile = profileFromForm(form);
+    if (!profile.resume_text && existing.resume_text) {
+      profile.resume_text = existing.resume_text;
+    }
+    const settings = {
+      includeProfileInAnalysis: document.getElementById("jsp-include-profile").checked,
+    };
+
+    await Promise.all([saveProfile(profile), saveSettings(settings)]);
+
+    const status = document.getElementById("jsp-save-status");
+    status.textContent = "Profile saved.";
+    status.classList.remove("jsp-hidden");
+    window.setTimeout(() => status.classList.add("jsp-hidden"), 2500);
+
+    showProfileForm({ mode: "edit" });
+  } catch (error) {
+    if (isExtensionContextError(error)) {
+      showExtensionReloadNeeded();
+      return;
+    }
+    showError("Couldn't save profile", error.message || "Try again.");
   }
-  const settings = {
-    includeProfileInAnalysis: document.getElementById("jsp-include-profile").checked,
-  };
-
-  await Promise.all([saveProfile(profile), saveSettings(settings)]);
-
-  const status = document.getElementById("jsp-save-status");
-  status.textContent = "Profile saved.";
-  status.classList.remove("jsp-hidden");
-  window.setTimeout(() => status.classList.add("jsp-hidden"), 2500);
-
-  showProfileForm({ mode: "edit" });
 }
 
 async function getProfileForRequest() {
@@ -517,6 +647,22 @@ async function getProfileForRequest() {
     return { profile: null, personalized: false };
   }
   return { profile, personalized: true };
+}
+
+function isExtensionContextError(error) {
+  const msg = String(error?.message || error || "");
+  return (
+    msg.includes("EXTENSION_CONTEXT_INVALIDATED") ||
+    msg.includes("Extension context invalidated") ||
+    msg.includes("Cannot read properties of undefined")
+  );
+}
+
+function showExtensionReloadNeeded() {
+  showError(
+    "Extension reloaded",
+    "Joblens was updated or reloaded. Refresh this page, then open the panel again."
+  );
 }
 
 function buildJobRequestBody(job, profile) {
@@ -586,18 +732,20 @@ function togglePanel() {
 }
 
 function setView(viewId) {
-  if (viewId !== "jsp-view-profile") {
+  if (viewId !== "jsp-view-profile" && viewId !== "jsp-view-improve") {
     lastScanView = viewId;
   }
 
   if (currentTab === "profile" && viewId !== "jsp-view-profile") {
     return;
   }
+  if (currentTab === "improve" && viewId !== "jsp-view-improve") {
+    return;
+  }
 
-  document.querySelectorAll(".jsp-view:not(#jsp-view-profile)").forEach((el) => {
+  document.querySelectorAll(".jsp-view").forEach((el) => {
     el.classList.remove("jsp-active");
   });
-  document.getElementById("jsp-view-profile")?.classList.remove("jsp-active");
   document.getElementById(viewId)?.classList.add("jsp-active");
 
   const rescanBtn = document.getElementById("jsp-rescan");
@@ -615,9 +763,9 @@ function setLoadingStep(step) {
   document.getElementById(step)?.classList.add("jsp-step-active");
 }
 
-function pickText(selectors) {
+function pickText(selectors, root = document) {
   for (const selector of selectors) {
-    const el = document.querySelector(selector);
+    const el = root.querySelector(selector);
     const text = el?.innerText?.trim();
     if (text) return text;
   }
@@ -626,6 +774,208 @@ function pickText(selectors) {
 
 function pickMeta(property) {
   return document.querySelector(`meta[property="${property}"]`)?.content?.trim() || null;
+}
+
+function stripHtmlToText(value) {
+  if (!value || typeof value !== "string") return "";
+  const withBreaks = value
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/\s*p\s*>/gi, "\n\n")
+    .replace(/<\/\s*li\s*>/gi, "\n")
+    .replace(/<\/\s*h[1-6]\s*>/gi, "\n\n");
+  const tmp = document.createElement("div");
+  tmp.innerHTML = withBreaks;
+  return (tmp.innerText || tmp.textContent || "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function looksLikePageChrome(text) {
+  const sample = (text || "").slice(0, 1500).toLowerCase();
+  const signals = [
+    "skip to search",
+    "skip to main content",
+    "keyboard shortcuts",
+    "notifications total",
+    "jump to active job details",
+    "jump to active search result",
+    "are these results helpful",
+    "job search faster with premium",
+    "you are on the messaging overlay",
+    "search by title, skill, or company",
+  ];
+  return signals.filter((signal) => sample.includes(signal)).length >= 2;
+}
+
+function cleanJobDescriptionText(text) {
+  let cleaned = (text || "").replace(/\r/g, "").trim();
+  if (!cleaned) return "";
+
+  // Drop Joblens panel text if it leaked into the scrape
+  cleaned = cleaned.replace(/\n\s*Joblens\b[\s\S]*$/i, "").trim();
+  cleaned = cleaned.replace(/\n\s*Scan\s*\n\s*Profile\b[\s\S]*$/i, "").trim();
+
+  const cutMarkers = [
+    /\n\s*Job search faster with Premium\b[\s\S]*$/i,
+    /\n\s*Reactivate Premium\b[\s\S]*$/i,
+    /\n\s*About the company\b[\s\S]*$/i,
+    /\n\s*Show more options\b[\s\S]*$/i,
+    /\n\s*You are on the messaging overlay\b[\s\S]*$/i,
+    /\n\s*Compose message\b[\s\S]*$/i,
+    /\n\s*Similar jobs\b[\s\S]*$/i,
+    /\n\s*People also viewed\b[\s\S]*$/i,
+    /\n\s*Are these results helpful\?[\s\S]*$/i,
+    /\n\s*Set job alert for\b[\s\S]*$/i,
+  ];
+  for (const marker of cutMarkers) {
+    cleaned = cleaned.replace(marker, "").trim();
+  }
+
+  cleaned = cleaned
+    .replace(/\n\s*…\s*show more\s*/gi, "\n")
+    .replace(/\n\s*show more\s*$/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return cleaned;
+}
+
+/**
+ * Carve a usable LinkedIn JD out of noisy page/detail text.
+ * Keeps auto-scan working without forcing manual copy/paste.
+ */
+function extractLinkedInJdFromText(raw) {
+  let text = (raw || "").replace(/\r/g, "").trim();
+  if (!text) return "";
+
+  // Prefer the "About the job" section when present
+  const aboutMatch = text.match(/\bAbout the job\b\s*([\s\S]+)/i);
+  if (aboutMatch?.[1]) {
+    text = aboutMatch[1].trim();
+  } else {
+    // If chrome precedes a real section header, start there
+    const sectionMatch = text.match(
+      /\n\s*((?:About|Who We Are|Role|Responsibilities|Requirements|What you'll do|What you.?ll do|Summary)\b[\s\S]+)/i
+    );
+    if (sectionMatch?.[1] && looksLikePageChrome(text.slice(0, Math.min(text.length, 2000)))) {
+      text = sectionMatch[1].trim();
+    }
+  }
+
+  text = cleanJobDescriptionText(text);
+
+  // Reject if still mostly navigation/list chrome
+  if (!text || text.length < 120 || looksLikePageChrome(text)) return "";
+
+  // Require at least some job-like substance
+  const jobSignals = [
+    "responsib",
+    "experience",
+    "about",
+    "role",
+    "require",
+    "qualification",
+    "engineer",
+    "team",
+    "build",
+    "product",
+    "software",
+  ];
+  const lower = text.toLowerCase();
+  const hits = jobSignals.filter((signal) => lower.includes(signal)).length;
+  if (hits < 2) return "";
+
+  return text;
+}
+
+function expandLinkedInDescription(detailRoot) {
+  const roots = [detailRoot, document].filter(Boolean);
+  for (const root of roots) {
+    const buttons = root.querySelectorAll("button, [role='button']");
+    for (const btn of buttons) {
+      const label = `${btn.innerText || ""} ${btn.getAttribute("aria-label") || ""}`.toLowerCase();
+      if (!label) continue;
+      if (label.includes("option")) continue;
+      if (
+        label.includes("see more") ||
+        label.includes("show more") ||
+        label.includes("…more") ||
+        label.trim() === "more"
+      ) {
+        // Prefer buttons near description content
+        const nearDescription =
+          btn.closest(".jobs-description, .jobs-box__html-content, #job-details, [class*='jobs-description']") ||
+          (detailRoot && detailRoot.contains(btn));
+        if (!nearDescription && root === document) continue;
+        try {
+          btn.click();
+        } catch {
+          // ignore click failures
+        }
+      }
+    }
+  }
+}
+
+function getLinkedInDetailRoot() {
+  const selectors = [
+    ".jobs-search__job-details--container",
+    ".jobs-details",
+    "#job-details",
+    ".job-view-layout.jobs-details",
+    ".scaffold-layout__detail",
+    ".jobs-search__job-details",
+    "div[class*='job-details']",
+  ];
+
+  for (const selector of selectors) {
+    const el = document.querySelector(selector);
+    if (!el) continue;
+    const text = el.innerText?.trim() || "";
+    if (text.length >= 80) return el;
+  }
+  return null;
+}
+
+function scrapeLinkedInDescription(detailRoot) {
+  expandLinkedInDescription(detailRoot);
+
+  const descriptionSelectors = [
+    ".jobs-description__content",
+    ".jobs-box__html-content",
+    ".jobs-description-content__text",
+    ".jobs-description__container",
+    "article.jobs-description__container",
+    "#job-details .jobs-description",
+    "#job-details",
+    ".jobs-description",
+    '[class*="jobs-description"]',
+  ];
+
+  if (detailRoot) {
+    for (const selector of descriptionSelectors) {
+      const el = detailRoot.querySelector(selector);
+      if (!el) continue;
+      const extracted = extractLinkedInJdFromText(el.innerText || "");
+      if (extracted) return { text: extracted, source: "linkedin-detail" };
+    }
+
+    const fromPane = extractLinkedInJdFromText(detailRoot.innerText || "");
+    if (fromPane) return { text: fromPane, source: "linkedin-stripped" };
+  }
+
+  // Last auto-recovery: strip JD from a wider snapshot, then discard chrome.
+  // This preserves auto-scan on LinkedIn without sending nav/list noise to the API.
+  const wideRoots = [
+    detailRoot?.innerText,
+    document.querySelector("main")?.innerText,
+    document.body?.innerText?.slice(0, 20000),
+  ].filter(Boolean);
+
+  for (const raw of wideRoots) {
+    const extracted = extractLinkedInJdFromText(raw);
+    if (extracted) return { text: extracted, source: "linkedin-stripped" };
+  }
+
+  return null;
 }
 
 function getJsonLdJobPosting() {
@@ -768,9 +1118,14 @@ function formatSlug(value) {
 }
 
 function findLinkedInCompany() {
-  const topCard = document.querySelector(
-    ".jobs-unified-top-card, .job-details-jobs-unified-top-card, .jobs-details-top-card"
-  );
+  const detailRoot = getLinkedInDetailRoot();
+  const topCard =
+    detailRoot?.querySelector(
+      ".jobs-unified-top-card, .job-details-jobs-unified-top-card, .jobs-details-top-card"
+    ) ||
+    document.querySelector(
+      ".jobs-unified-top-card, .job-details-jobs-unified-top-card, .jobs-details-top-card"
+    );
 
   if (topCard) {
     const companyLink = topCard.querySelector('a[href*="/company/"]');
@@ -778,14 +1133,24 @@ function findLinkedInCompany() {
     if (companyText) return companyText;
   }
 
-  const companyLink = document.querySelector('a[href*="/company/"]');
-  return companyLink?.innerText?.trim() || null;
+  if (detailRoot) {
+    const companyLink = detailRoot.querySelector('a[href*="/company/"]');
+    const companyText = companyLink?.innerText?.trim();
+    if (companyText) return companyText;
+  }
+
+  return null;
 }
 
 function findLinkedInLocation() {
-  const topCard = document.querySelector(
-    ".jobs-unified-top-card, .job-details-jobs-unified-top-card, .jobs-details-top-card"
-  );
+  const detailRoot = getLinkedInDetailRoot();
+  const topCard =
+    detailRoot?.querySelector(
+      ".jobs-unified-top-card, .job-details-jobs-unified-top-card, .jobs-details-top-card"
+    ) ||
+    document.querySelector(
+      ".jobs-unified-top-card, .job-details-jobs-unified-top-card, .jobs-details-top-card"
+    );
   if (!topCard) return null;
 
   const primaryDescription = topCard.querySelector(
@@ -800,19 +1165,33 @@ function findLinkedInLocation() {
   }
 
   return (
-    pickText([
-      ".jobs-unified-top-card__bullet",
-      ".job-details-jobs-unified-top-card__bullet",
-      ".jobs-unified-top-card__workplace-type",
-    ]) || null
+    pickText(
+      [
+        ".jobs-unified-top-card__bullet",
+        ".job-details-jobs-unified-top-card__bullet",
+        ".jobs-unified-top-card__workplace-type",
+      ],
+      topCard
+    ) || null
   );
 }
 
 function scrapeCompanyLogo() {
-  const logoImg = document.querySelector(
-    '.jobs-unified-top-card__company-logo img, .job-details-jobs-unified-top-card__company-logo img, img[class*="company-logo"], .logo img, header img, nav img, img[alt*="logo" i]'
+  const detailRoot = getLinkedInDetailRoot();
+  const scopedRoot = detailRoot || document;
+  const logoImg = scopedRoot.querySelector(
+    [
+      ".jobs-unified-top-card__company-logo img",
+      ".job-details-jobs-unified-top-card__company-logo img",
+      ".jobs-company__company-logo img",
+      'img[class*="company-logo"]',
+      ".logo img",
+      'img[alt*="logo" i]',
+    ].join(", ")
   );
-  if (logoImg?.src) return logoImg.src;
+  if (logoImg?.src && !/profile-displayphoto|\/dms\/image\/.*profile/i.test(logoImg.src)) {
+    return logoImg.src;
+  }
 
   const jsonLd = getJsonLdJobPosting();
   const logo = jsonLd?.hiringOrganization?.logo;
@@ -828,15 +1207,24 @@ const DESCRIPTION_SELECTORS = [
   '[data-testid="job-description"]',
   ".jobs-description__content",
   ".jobs-box__html-content",
+  ".jobs-description-content__text",
   ".posting-page",
-  ".content",
   '[data-automation-id="jobPostingDescription"]',
 ];
 
 function computeScrapeConfidence(source, description) {
   const length = (description || "").trim().length;
 
-  if (source === "json-ld" || source === "selector") {
+  if (source === "linkedin-miss" || source === "body-fallback") {
+    return "low";
+  }
+
+  if (
+    source === "json-ld" ||
+    source === "selector" ||
+    source === "linkedin-detail" ||
+    source === "linkedin-stripped"
+  ) {
     if (length >= 300) return "high";
     if (length >= 150) return "medium";
     return "low";
@@ -851,11 +1239,24 @@ function computeScrapeConfidence(source, description) {
 
 function scrapeJobPage() {
   const host = window.location.hostname;
+  const isLinkedIn = host.includes("linkedin.com");
   const jsonLd = getJsonLdJobPosting();
   const titleFromPage = parseTitleFromDocumentTitle();
+  const linkedInDetail = isLinkedIn ? getLinkedInDetailRoot() : null;
 
   let title =
     jsonLd?.title ||
+    (linkedInDetail
+      ? pickText(
+          [
+            ".jobs-unified-top-card__job-title",
+            ".job-details-jobs-unified-top-card__job-title",
+            "h1.t-24",
+            "h1",
+          ],
+          linkedInDetail
+        )
+      : null) ||
     pickText([
       "h1.job-title",
       ".job-title h1",
@@ -870,6 +1271,7 @@ function scrapeJobPage() {
 
   let company =
     jsonLd?.hiringOrganization?.name ||
+    (isLinkedIn ? findLinkedInCompany() : null) ||
     pickText([
       ".company-name",
       ".employer-name",
@@ -884,6 +1286,7 @@ function scrapeJobPage() {
 
   let location =
     parseLocationFromJsonLd(jsonLd?.jobLocation) ||
+    (isLinkedIn ? findLinkedInLocation() : null) ||
     pickText([
       ".location",
       '[data-testid="job-location"]',
@@ -891,18 +1294,6 @@ function scrapeJobPage() {
       ".posting-categories .location",
     ]) ||
     null;
-
-  if (host.includes("linkedin.com")) {
-    company =
-      company ||
-      findLinkedInCompany() ||
-      pickText([
-        ".jobs-unified-top-card__company-name a",
-        ".job-details-jobs-unified-top-card__company-name a",
-        ".artdeco-entity-lockup__subtitle",
-      ]);
-    location = location || findLinkedInLocation();
-  }
 
   if (host.includes("greenhouse.io")) {
     company = company || pickText([".company-name", "#header .company-name"]) || companyFromUrl();
@@ -926,28 +1317,59 @@ function scrapeJobPage() {
   let description = null;
   let scrapeSource = "none";
 
-  if (jsonLd?.description) {
-    description = jsonLd.description;
+  if (isLinkedIn) {
+    const linkedInResult = scrapeLinkedInDescription(linkedInDetail);
+    if (linkedInResult?.text) {
+      description = linkedInResult.text;
+      scrapeSource = linkedInResult.source;
+    } else if (jsonLd?.description) {
+      const fromJsonLd = extractLinkedInJdFromText(stripHtmlToText(jsonLd.description));
+      if (fromJsonLd) {
+        description = fromJsonLd;
+        scrapeSource = "json-ld";
+      }
+    }
+
+    if (!description) {
+      description = "";
+      scrapeSource = "linkedin-miss";
+    }
+  } else if (jsonLd?.description) {
+    description = cleanJobDescriptionText(stripHtmlToText(jsonLd.description));
     scrapeSource = "json-ld";
   } else {
     const selectorText = pickText(DESCRIPTION_SELECTORS);
-    if (selectorText) {
-      description = selectorText;
+    if (selectorText && !looksLikePageChrome(selectorText)) {
+      description = cleanJobDescriptionText(selectorText);
       scrapeSource = "selector";
     } else {
       const ogDescription = pickMeta("og:description");
       if (ogDescription) {
-        description = ogDescription;
+        description = cleanJobDescriptionText(ogDescription);
         scrapeSource = "og-description";
       } else {
-        description = document.body.innerText.slice(0, 8000);
+        description = "";
         scrapeSource = "body-fallback";
       }
     }
   }
 
+  if (description && looksLikePageChrome(description)) {
+    const recovered = isLinkedIn ? extractLinkedInJdFromText(description) : "";
+    if (recovered) {
+      description = recovered;
+      scrapeSource = "linkedin-stripped";
+    } else {
+      description = "";
+      scrapeSource = isLinkedIn ? "linkedin-miss" : "body-fallback";
+    }
+  }
+
   const cleanedDescription = (description || "").trim() || "No description found on this page.";
-  const confidence = computeScrapeConfidence(scrapeSource, cleanedDescription);
+  const confidence = computeScrapeConfidence(
+    scrapeSource,
+    cleanedDescription === "No description found on this page." ? "" : cleanedDescription
+  );
 
   return {
     title: title || "Untitled role",
@@ -1023,9 +1445,10 @@ function renderNumberedList(items) {
   return `<ol class="jsp-list jsp-numbered">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>`;
 }
 
-function renderSection(title, bodyHtml, expanded = false) {
+function renderSection(title, bodyHtml, expanded = false, sectionId = "") {
+  const idAttr = sectionId ? ` id="${escapeHtml(sectionId)}"` : "";
   return `
-    <div class="jsp-section${expanded ? " jsp-expanded" : ""}">
+    <div class="jsp-section${expanded ? " jsp-expanded" : ""}"${idAttr}>
       <button type="button" class="jsp-section-header">
         <span>${escapeHtml(title)}</span>
         <span class="jsp-chevron">&#9660;</span>
@@ -1054,6 +1477,19 @@ function setJobCardIcon(logoUrl) {
   };
 }
 
+function renderProse(text) {
+  const paragraphs = String(text || "")
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (!paragraphs.length) {
+    return `<p class="jsp-text">${escapeHtml(text || "")}</p>`;
+  }
+
+  return paragraphs.map((part) => `<p class="jsp-text">${escapeHtml(part)}</p>`).join("");
+}
+
 function renderFitCard(fitScore) {
   const card = document.getElementById("jsp-fit-card");
   if (!card) return;
@@ -1072,38 +1508,460 @@ function renderFitCard(fitScore) {
     <div class="jsp-fit-score ${scoreClass}">
       <span class="jsp-fit-number">${fitScore.score}</span>
       <div class="jsp-fit-details">
-        <strong class="jsp-profile-form-label">Resume fit</strong>
+        <strong class="jsp-fit-label">Resume fit</strong>
         <p class="jsp-fit-summary">${escapeHtml(fitScore.summary)}</p>
       </div>
     </div>
   `;
 }
 
-function renderImprovementsSection(suggestions) {
-  if (!suggestions?.length) {
-    return renderSection(
-      "Improve my resume for this role",
-      "<p class='jsp-text'>No suggestions yet. Add a profile and rescan to get tailored bullet rewrites.</p>"
-    );
+function getAcceptedCount(draft) {
+  return (draft?.suggestions || []).filter((item) => item.status === "accepted").length;
+}
+
+function renderImprovementsBody(draft) {
+  const suggestions = draft?.suggestions || [];
+  if (!suggestions.length) {
+    return `
+      <div class="jsp-improve-empty">
+        <p class="jsp-text">No suggestions yet.</p>
+        <p class="jsp-text">Add a profile, turn on “Include my profile in analysis,” then scan a job to get tailored bullet rewrites here.</p>
+      </div>
+    `;
   }
 
+  const acceptedCount = getAcceptedCount(draft);
   const items = suggestions
-    .map(
-      (item) => `
-      <div class="jsp-improvement-item">
-        ${item.original ? `<p class="jsp-improvement-original"><strong>Was:</strong> ${escapeHtml(item.original)}</p>` : ""}
-        <p class="jsp-improvement-suggested"><strong>Suggested:</strong> ${escapeHtml(item.suggested)}</p>
+    .map((item) => {
+      const statusClass =
+        item.status === "accepted"
+          ? "jsp-improvement-accepted"
+          : item.status === "rejected"
+            ? "jsp-improvement-rejected"
+            : "";
+      const statusLabel =
+        item.status === "accepted" ? "Accepted" : item.status === "rejected" ? "Rejected" : "Pending";
+
+      return `
+      <div class="jsp-improvement-item ${statusClass}" data-suggestion-id="${escapeHtml(item.id)}">
+        <div class="jsp-improvement-status">${statusLabel}</div>
+        ${item.original ? `<p class="jsp-improvement-original"><strong>Was:</strong> ${escapeHtml(item.original)}</p>` : `<p class="jsp-improvement-original"><strong>New bullet</strong></p>`}
+        <p class="jsp-improvement-suggested"><strong>Suggested:</strong> <span class="jsp-suggested-text">${escapeHtml(item.suggested)}</span></p>
         <p class="jsp-improvement-rationale">${escapeHtml(item.rationale)}</p>
+        <div class="jsp-improvement-edit jsp-hidden">
+          <textarea class="jsp-improvement-edit-input" rows="3">${escapeHtml(item.suggested)}</textarea>
+        </div>
+        <div class="jsp-improvement-actions">
+          ${
+            item.status === "pending"
+              ? `
+            <button type="button" class="jsp-btn-secondary jsp-accept-suggestion">Accept</button>
+            <button type="button" class="jsp-btn-text jsp-edit-suggestion">Edit</button>
+            <button type="button" class="jsp-btn-text jsp-reject-suggestion">Reject</button>
+          `
+              : `
+            <button type="button" class="jsp-btn-text jsp-undo-suggestion">Undo</button>
+          `
+          }
+          <button type="button" class="jsp-btn-secondary jsp-save-edit jsp-hidden">Save edit</button>
+          <button type="button" class="jsp-btn-text jsp-cancel-edit jsp-hidden">Cancel</button>
+        </div>
       </div>
-    `
-    )
+    `;
+    })
     .join("");
 
-  return renderSection("Improve my resume for this role", items);
+  const footer = `
+    <div class="jsp-improvement-footer">
+      <p class="jsp-improvement-summary">${acceptedCount} accepted · original profile unchanged</p>
+      <div class="jsp-improvement-footer-actions">
+        <button type="button" class="jsp-btn-secondary" id="jsp-preview-tailored">Preview tailored resume</button>
+        <button type="button" class="jsp-btn-primary" id="jsp-download-tailored" ${acceptedCount ? "" : "disabled"}>Download .txt</button>
+      </div>
+      <div id="jsp-tailored-preview" class="jsp-tailored-preview jsp-hidden"></div>
+    </div>
+  `;
+
+  return `<div id="jsp-improve-section" class="jsp-improve-list">${items}${footer}</div>`;
+}
+
+function renderImprovePanel() {
+  const content = document.getElementById("jsp-improve-content");
+  const subtitle = document.getElementById("jsp-improve-subtitle");
+  const jobMeta = document.getElementById("jsp-improve-job-meta");
+  if (!content) return;
+
+  const draft = currentTailoredDraft;
+  const hasSuggestions = Boolean(draft?.suggestions?.length);
+
+  if (currentJob && hasSuggestions) {
+    jobMeta?.classList.remove("jsp-hidden");
+    if (jobMeta) {
+      jobMeta.textContent = [currentJob.title, currentJob.company].filter(Boolean).join(" · ");
+    }
+    if (subtitle) {
+      subtitle.textContent =
+        "Accept, edit, or reject suggestions for this role. Your saved profile stays unchanged.";
+    }
+  } else {
+    jobMeta?.classList.add("jsp-hidden");
+    if (jobMeta) jobMeta.textContent = "";
+    if (subtitle) {
+      subtitle.textContent =
+        "Scan a job with your profile included to get tailored bullet suggestions.";
+    }
+  }
+
+  content.innerHTML = renderImprovementsBody(draft);
+  bindImprovementEvents();
+}
+
+function setPrepStatus(message, isError = false) {
+  const status = document.getElementById("jsp-prep-status");
+  if (!status) return;
+  if (!message) {
+    status.textContent = "";
+    status.classList.add("jsp-hidden");
+    status.classList.remove("jsp-prep-status-error");
+    return;
+  }
+  status.textContent = message;
+  status.classList.remove("jsp-hidden");
+  status.classList.toggle("jsp-prep-status-error", isError);
+}
+
+function renderPrepMessageBubble(message) {
+  const roleClass = message.role === "user" ? "jsp-prep-msg-user" : "jsp-prep-msg-assistant";
+  const label = message.role === "user" ? "You" : "Prep";
+  return `
+    <div class="jsp-prep-msg ${roleClass}">
+      <span class="jsp-prep-msg-label">${label}</span>
+      <div class="jsp-prep-msg-body">${renderProse(message.content)}</div>
+    </div>
+  `;
+}
+
+function renderPrepSuggestions() {
+  const container = document.getElementById("jsp-prep-suggestions");
+  if (!container) return;
+
+  if (prepMessages.length > 0) {
+    container.innerHTML = "";
+    container.classList.add("jsp-hidden");
+    return;
+  }
+
+  container.classList.remove("jsp-hidden");
+  container.innerHTML = PREP_SUGGESTIONS.map(
+    (prompt) =>
+      `<button type="button" class="jsp-prep-chip" data-prep-prompt="${escapeHtml(prompt)}">${escapeHtml(prompt)}</button>`
+  ).join("");
+
+  container.querySelectorAll(".jsp-prep-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      sendPrepMessage(btn.dataset.prepPrompt || btn.textContent);
+    });
+  });
+}
+
+function renderPrepMessages() {
+  const container = document.getElementById("jsp-prep-messages");
+  if (!container) return;
+
+  if (!prepMessages.length) {
+    container.innerHTML = `
+      <div class="jsp-prep-welcome">
+        <p>Pick a prompt below or ask your own. Answers use this job posting and your profile when available.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = prepMessages.map(renderPrepMessageBubble).join("");
+  container.scrollTop = container.scrollHeight;
+}
+
+function renderPrepPanel() {
+  const empty = document.getElementById("jsp-prep-empty");
+  const chat = document.getElementById("jsp-prep-chat");
+  const jobMeta = document.getElementById("jsp-prep-job-meta");
+  if (!empty || !chat) return;
+
+  const hasJob = Boolean(currentJob?.description && currentJob.description.length >= 50);
+
+  empty.classList.toggle("jsp-hidden", hasJob);
+  chat.classList.toggle("jsp-hidden", !hasJob);
+
+  if (!hasJob) {
+    jobMeta?.classList.add("jsp-hidden");
+    if (jobMeta) jobMeta.textContent = "";
+    setPrepStatus("");
+    return;
+  }
+
+  jobMeta?.classList.remove("jsp-hidden");
+  if (jobMeta) {
+    jobMeta.textContent = [currentJob.title, currentJob.company].filter(Boolean).join(" · ");
+  }
+
+  renderPrepMessages();
+  renderPrepSuggestions();
+
+  const sendBtn = document.getElementById("jsp-prep-send");
+  const input = document.getElementById("jsp-prep-input");
+  if (sendBtn) sendBtn.disabled = prepSending;
+  if (input) input.disabled = prepSending;
+}
+
+function clearPrepChat() {
+  if (prepSending) return;
+  prepMessages = [];
+  setPrepStatus("");
+  renderPrepPanel();
+}
+
+async function handlePrepSubmit(event) {
+  event.preventDefault();
+  const input = document.getElementById("jsp-prep-input");
+  const text = (input?.value || "").trim();
+  if (!text) return;
+  if (input) input.value = "";
+  await sendPrepMessage(text);
+}
+
+async function sendPrepMessage(text) {
+  const question = String(text || "").trim();
+  if (!question || prepSending) return;
+  if (!currentJob?.description) {
+    setPrepStatus("Scan a job first.", true);
+    return;
+  }
+
+  prepSending = true;
+  prepMessages.push({ role: "user", content: question });
+  renderPrepPanel();
+  setPrepStatus("Thinking...");
+
+  const sendBtn = document.getElementById("jsp-prep-send");
+  const input = document.getElementById("jsp-prep-input");
+  if (sendBtn) sendBtn.disabled = true;
+  if (input) input.disabled = true;
+
+  try {
+    const { profile } = await getProfileForRequest();
+    const result = await postJson(ENDPOINTS.interviewChat, {
+      ...buildJobRequestBody(currentJob, profile),
+      messages: prepMessages.map((m) => ({ role: m.role, content: m.content })),
+    });
+
+    const answer = (result?.answer || "").trim();
+    if (!answer) throw new Error("No answer returned");
+
+    prepMessages.push({ role: "assistant", content: answer });
+    setPrepStatus("");
+  } catch (error) {
+    prepMessages.pop();
+    const msg =
+      error?.message === "RATE_LIMIT"
+        ? "Rate limit reached. Wait a minute and try again."
+        : error?.message || "Couldn't generate an answer. Try again.";
+    setPrepStatus(msg, true);
+  } finally {
+    prepSending = false;
+    renderPrepPanel();
+    document.getElementById("jsp-prep-input")?.focus();
+  }
+}
+
+
+function bindImprovementEvents() {
+  const container = document.getElementById("jsp-improve-content");
+  if (!container) return;
+
+  container.querySelectorAll(".jsp-accept-suggestion").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.closest(".jsp-improvement-item")?.dataset.suggestionId;
+      handleAcceptSuggestion(id);
+    });
+  });
+
+  container.querySelectorAll(".jsp-reject-suggestion").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.closest(".jsp-improvement-item")?.dataset.suggestionId;
+      handleRejectSuggestion(id);
+    });
+  });
+
+  container.querySelectorAll(".jsp-undo-suggestion").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.closest(".jsp-improvement-item")?.dataset.suggestionId;
+      handleUndoSuggestion(id);
+    });
+  });
+
+  container.querySelectorAll(".jsp-edit-suggestion").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = btn.closest(".jsp-improvement-item");
+      if (!item) return;
+      item.querySelector(".jsp-improvement-edit")?.classList.remove("jsp-hidden");
+      item.querySelector(".jsp-save-edit")?.classList.remove("jsp-hidden");
+      item.querySelector(".jsp-cancel-edit")?.classList.remove("jsp-hidden");
+      btn.classList.add("jsp-hidden");
+      item.querySelector(".jsp-accept-suggestion")?.classList.add("jsp-hidden");
+      item.querySelector(".jsp-reject-suggestion")?.classList.add("jsp-hidden");
+    });
+  });
+
+  container.querySelectorAll(".jsp-cancel-edit").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = btn.closest(".jsp-improvement-item");
+      if (!item) return;
+      item.querySelector(".jsp-improvement-edit")?.classList.add("jsp-hidden");
+      item.querySelector(".jsp-save-edit")?.classList.add("jsp-hidden");
+      item.querySelector(".jsp-cancel-edit")?.classList.add("jsp-hidden");
+      item.querySelector(".jsp-edit-suggestion")?.classList.remove("jsp-hidden");
+      item.querySelector(".jsp-accept-suggestion")?.classList.remove("jsp-hidden");
+      item.querySelector(".jsp-reject-suggestion")?.classList.remove("jsp-hidden");
+    });
+  });
+
+  container.querySelectorAll(".jsp-save-edit").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = btn.closest(".jsp-improvement-item");
+      const id = item?.dataset.suggestionId;
+      const edited = item?.querySelector(".jsp-improvement-edit-input")?.value || "";
+      handleAcceptSuggestion(id, edited);
+    });
+  });
+
+  document.getElementById("jsp-preview-tailored")?.addEventListener("click", handlePreviewTailored);
+  document.getElementById("jsp-download-tailored")?.addEventListener("click", handleDownloadTailored);
+}
+
+async function persistCurrentDraft() {
+  if (!currentJob?.url || !currentTailoredDraft) return;
+  currentTailoredDraft.updatedAt = new Date().toISOString();
+  await saveTailoredDraft(currentJob.url, currentTailoredDraft);
+}
+
+function rebuildTailoredProfileFromMaster(masterProfile, draft) {
+  let tailored = cloneProfile(masterProfile);
+  (draft.suggestions || [])
+    .filter((item) => item.status === "accepted")
+    .forEach((item) => {
+      tailored = applySuggestionToProfile(tailored, item, item.suggested);
+    });
+  tailored.resume_text = profileToResumeText(tailored);
+  return tailored;
+}
+
+async function handleAcceptSuggestion(suggestionId, editedText) {
+  if (!currentTailoredDraft || !suggestionId) return;
+  const suggestion = currentTailoredDraft.suggestions.find((item) => item.id === suggestionId);
+  if (!suggestion) return;
+
+  if (editedText?.trim()) {
+    suggestion.suggested = editedText.trim();
+  }
+
+  suggestion.status = "accepted";
+  const master = await loadProfile();
+  currentTailoredDraft.tailoredProfile = rebuildTailoredProfileFromMaster(master, currentTailoredDraft);
+  await persistCurrentDraft();
+  refreshImprovementsSection();
+}
+
+async function handleRejectSuggestion(suggestionId) {
+  if (!currentTailoredDraft || !suggestionId) return;
+  const suggestion = currentTailoredDraft.suggestions.find((item) => item.id === suggestionId);
+  if (!suggestion) return;
+
+  suggestion.status = "rejected";
+  const master = await loadProfile();
+  currentTailoredDraft.tailoredProfile = rebuildTailoredProfileFromMaster(master, currentTailoredDraft);
+  await persistCurrentDraft();
+  refreshImprovementsSection();
+}
+
+async function handleUndoSuggestion(suggestionId) {
+  if (!currentTailoredDraft || !suggestionId) return;
+  const suggestion = currentTailoredDraft.suggestions.find((item) => item.id === suggestionId);
+  if (!suggestion) return;
+
+  suggestion.status = "pending";
+  const master = await loadProfile();
+  currentTailoredDraft.tailoredProfile = rebuildTailoredProfileFromMaster(master, currentTailoredDraft);
+  await persistCurrentDraft();
+  refreshImprovementsSection();
+}
+
+function refreshImprovementsSection() {
+  renderImprovePanel();
+}
+
+function handlePreviewTailored() {
+  if (!currentTailoredDraft) return;
+  const preview = document.getElementById("jsp-tailored-preview");
+  if (!preview) return;
+
+  const text = profileToResumeText(currentTailoredDraft.tailoredProfile || {});
+  preview.classList.remove("jsp-hidden");
+  preview.innerHTML = `<pre class="jsp-tailored-preview-body">${escapeHtml(text || "Accept suggestions to build a tailored resume.")}</pre>`;
+}
+
+function handleDownloadTailored() {
+  if (!currentTailoredDraft || !getAcceptedCount(currentTailoredDraft)) return;
+
+  const text = profileToResumeText(currentTailoredDraft.tailoredProfile || {});
+  const company = (currentJob?.company || "role").replace(/[^\w\-]+/g, "_");
+  const filename = `Joblens_tailored_${company}.txt`;
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function ensureTailoredDraft(job, profile, suggestions) {
+  const normalized = normalizeSuggestions(suggestions || []);
+  const existing = await getTailoredDraft(job.url);
+
+  // Reuse accepted/rejected decisions when rescanning the same job URL.
+  if (existing?.suggestions?.length && normalized.length) {
+    const byOriginal = new Map(
+      existing.suggestions.map((item) => [`${item.original}||${item.suggested}`, item])
+    );
+    normalized.forEach((item) => {
+      const prev = byOriginal.get(`${item.original}||${item.suggested}`);
+      if (prev?.status) item.status = prev.status;
+      if (prev?.id) item.id = prev.id;
+    });
+  }
+
+  const draft = {
+    jobUrl: job.url,
+    jobTitle: job.title,
+    company: job.company,
+    scannedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    suggestions: normalized,
+    tailoredProfile: cloneProfile(profile),
+  };
+
+  draft.tailoredProfile = rebuildTailoredProfileFromMaster(profile, draft);
+  currentTailoredDraft = draft;
+  await saveTailoredDraft(job.url, draft);
+  return draft;
 }
 
 function renderResults(job, analysis, options = {}) {
   const { personalized = false, fitScore = null, improvements = null } = options;
+
+  if (!currentJob || currentJob.url !== job.url) {
+    prepMessages = [];
+  }
 
   currentJob = job;
   currentAnalysis = analysis;
@@ -1131,8 +1989,8 @@ function renderResults(job, analysis, options = {}) {
   const sections = [
     renderSection("Role Requirements", renderListItems(analysis.role_requirements), true),
     renderSection("Technical Skills", renderTechnicalSkills(analysis, fitScore, personalized)),
-    renderSection("Why This Role", `<p class="jsp-text">${escapeHtml(analysis.why_role)}</p>`),
-    renderSection("Why This Company", `<p class="jsp-text">${escapeHtml(analysis.why_company)}</p>`),
+    renderSection("Why This Role", renderProse(analysis.why_role)),
+    renderSection("Why This Company", renderProse(analysis.why_company)),
     renderSection(
       "Cold Email Points",
       `${renderNumberedList(analysis.cold_email_points)}
@@ -1144,11 +2002,26 @@ function renderResults(job, analysis, options = {}) {
   ];
 
   if (personalized) {
-    sections.push(renderImprovementsSection(improvements?.suggestions));
+    const suggestionCount =
+      currentTailoredDraft?.suggestions?.length || improvements?.suggestions?.length || 0;
+    if (suggestionCount) {
+      sections.push(
+        renderSection(
+          "Resume improvements",
+          `<p class="jsp-text">${suggestionCount} tailored suggestion${suggestionCount === 1 ? "" : "s"} ready.</p>
+           <div class="jsp-section-actions">
+             <button type="button" class="jsp-btn-secondary" id="jsp-goto-improve">Open Improve tab</button>
+           </div>`
+        )
+      );
+    }
   }
 
   document.getElementById("jsp-results-sections").innerHTML = sections.join("");
   bindAccordionEvents();
+  renderImprovePanel();
+
+  document.getElementById("jsp-goto-improve")?.addEventListener("click", () => setTab("improve"));
 
   document.getElementById("jsp-copy-email")?.addEventListener("click", () => {
     const text = (analysis.cold_email_points || [])
@@ -1244,14 +2117,29 @@ function showManualPasteView(job) {
   document.getElementById("jsp-manual-title").value = job.title === "Untitled role" ? "" : job.title;
   document.getElementById("jsp-manual-company").value =
     job.company === "Unknown company" ? "" : job.company;
-  document.getElementById("jsp-manual-description").value =
-    job.description === "No description found on this page." ? "" : job.description;
+
+  const rawDescription = job.description === "No description found on this page." ? "" : job.description;
+  // Auto-prefill whenever we recovered a cleaned JD. Leave empty only if still chrome/empty.
+  const shouldPrefillDescription = Boolean(rawDescription) && !looksLikePageChrome(rawDescription);
+
+  document.getElementById("jsp-manual-description").value = shouldPrefillDescription
+    ? rawDescription
+    : "";
 
   const hint = document.getElementById("jsp-manual-hint");
-  if (job.scrapeSource === "body-fallback") {
+  if (
+    shouldPrefillDescription &&
+    (job.scrapeSource === "linkedin-stripped" || job.scrapeSource === "linkedin-detail")
+  ) {
+    hint.textContent =
+      "We auto-filled a cleaned LinkedIn job description. Review it, edit if needed, then Analyze.";
+  } else if (job.scrapeSource === "linkedin-miss") {
+    hint.textContent =
+      "Couldn't isolate the LinkedIn job description automatically. Paste the job description below.";
+  } else if (job.scrapeSource === "body-fallback") {
     hint.textContent =
       "This page layout isn't recognized. Paste the full job description below for accurate analysis.";
-  } else if (job.description.length < 150) {
+  } else if ((rawDescription || "").length < 150) {
     hint.textContent =
       "The scraped description looks too short. Paste the full job description below to continue.";
   } else {
@@ -1318,9 +2206,13 @@ async function analyzeJob(job) {
           matched_skills: fitScore.matched_skills,
           missing_skills: fitScore.missing_skills,
         });
+        await ensureTailoredDraft(job, profile, improvements?.suggestions || []);
       } catch {
         // Fit score and improvements are optional enhancements
+        currentTailoredDraft = null;
       }
+    } else {
+      currentTailoredDraft = null;
     }
 
     renderResults(job, analysis, { personalized, fitScore, improvements });

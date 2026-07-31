@@ -8,6 +8,7 @@ var JOBSCRAPPER_CONFIG = {
     suggestImprovements: "/suggest-improvements",
     generateColdEmail: "/generate-cold-email",
     generateCoverLetter: "/generate-cover-letter",
+    interviewChat: "/interview-chat",
     parseResume: "/parse-resume",
   },
 };

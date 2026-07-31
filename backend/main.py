@@ -10,6 +10,7 @@ from openai_client import (
     analyze_job,
     generate_cold_email,
     generate_cover_letter,
+    interview_chat,
     parse_resume,
     score_fit,
     suggest_improvements,
@@ -23,6 +24,8 @@ from schemas import (
     FitScoreResponse,
     ImprovementsRequest,
     ImprovementsResponse,
+    InterviewChatRequest,
+    InterviewChatResponse,
     JobRequest,
     JobResponse,
     JobWithProfileRequest,
@@ -132,6 +135,26 @@ async def get_cover_letter(cover_letter_request: JobWithProfileRequest, request:
         return await generate_cover_letter(cover_letter_request)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to generate cover letter") from e
+
+
+@router.post("/interview-chat", response_model=InterviewChatResponse)
+async def get_interview_chat(chat_request: InterviewChatRequest, request: Request):
+    _check_rate_limit(request)
+    _validate_description(chat_request.description)
+
+    if not chat_request.messages:
+        raise HTTPException(status_code=400, detail="At least one message is required.")
+
+    last = chat_request.messages[-1]
+    if (last.role or "").strip().lower() != "user" or not (last.content or "").strip():
+        raise HTTPException(status_code=400, detail="Conversation must end with a user message.")
+
+    try:
+        return await interview_chat(chat_request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to generate interview answer") from e
 
 
 @router.post("/parse-resume", response_model=ParseResumeResponse)

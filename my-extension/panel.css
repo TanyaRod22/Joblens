@@ -253,6 +253,26 @@
   background: var(--jsp-surface);
 }
 
+.jsp-btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.jsp-btn-danger-text {
+  border: none;
+  background: transparent;
+  color: var(--jsp-danger);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 0 0;
+  align-self: center;
+}
+
+.jsp-btn-danger-text:hover {
+  text-decoration: underline;
+}
+
 .jsp-loading {
   flex: 1;
   align-items: center;
@@ -424,6 +444,10 @@
   color: var(--jsp-text);
 }
 
+.jsp-text:first-child {
+  margin-top: 0;
+}
+
 .jsp-skill-list {
   list-style: none;
   margin: 12px 0 0;
@@ -557,9 +581,9 @@
   border: none;
   background: transparent;
   color: var(--jsp-muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 8px 12px;
+  padding: 8px 8px;
   border-radius: 8px;
   cursor: pointer;
 }
@@ -576,6 +600,47 @@
 
 .jsp-profile-view {
   gap: 16px;
+}
+
+.jsp-improve-view {
+  gap: 14px;
+}
+
+.jsp-improve-intro h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--jsp-text);
+}
+
+.jsp-improve-intro p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--jsp-muted);
+}
+
+.jsp-improve-job-meta {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--jsp-text);
+  padding: 10px 12px;
+  background: var(--jsp-surface);
+  border: 1px solid var(--jsp-border);
+  border-radius: 8px;
+}
+
+.jsp-improve-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 16px;
+}
+
+.jsp-improve-list {
+  display: flex;
+  flex-direction: column;
 }
 
 .jsp-profile-step {
@@ -880,6 +945,9 @@
 .jsp-fit-details {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .jsp-fit-high {
@@ -920,12 +988,13 @@
 .jsp-fit-details strong {
   display: block;
   font-size: 13px;
-  margin-bottom: 4px;
+  margin: 0;
   color: var(--jsp-text);
 }
 
-.jsp-fit-details p {
-  margin: 10px 0;
+.jsp-fit-details p,
+.jsp-fit-summary {
+  margin: 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--jsp-muted);
@@ -938,6 +1007,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--jsp-muted);
+  margin: 0;
 }
 
 .jsp-fit-empty {
@@ -1026,13 +1096,33 @@
 }
 
 .jsp-improvement-item {
-  padding: 10px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--jsp-border);
 }
 
-.jsp-improvement-item:last-child {
+.jsp-improvement-item:last-of-type {
   border-bottom: none;
-  padding-bottom: 0;
+}
+
+.jsp-improvement-status {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--jsp-muted);
+  margin-bottom: 6px;
+}
+
+.jsp-improvement-accepted .jsp-improvement-status {
+  color: #15803d;
+}
+
+.jsp-improvement-rejected {
+  opacity: 0.65;
+}
+
+.jsp-improvement-rejected .jsp-improvement-status {
+  color: #b45309;
 }
 
 .jsp-improvement-original,
@@ -1044,8 +1134,242 @@
 }
 
 .jsp-improvement-rationale {
-  margin: 0;
+  margin: 0 0 10px;
   font-size: 12px;
   line-height: 1.45;
   color: var(--jsp-muted);
+}
+
+.jsp-improvement-edit {
+  margin-bottom: 10px;
+}
+
+.jsp-improvement-edit-input {
+  width: 100%;
+  border: 1px solid var(--jsp-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--jsp-text);
+  background: var(--jsp-bg);
+  font-family: inherit;
+  resize: vertical;
+}
+
+.jsp-improvement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.jsp-improvement-footer {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--jsp-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.jsp-improvement-summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--jsp-muted);
+}
+
+.jsp-improvement-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.jsp-tailored-preview {
+  border: 1px solid var(--jsp-border);
+  border-radius: 10px;
+  background: var(--jsp-surface);
+  overflow: hidden;
+}
+
+.jsp-tailored-preview-body {
+  margin: 0;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  color: var(--jsp-text);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.jsp-prep-view {
+  gap: 12px;
+}
+
+.jsp-prep-intro h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--jsp-text);
+}
+
+.jsp-prep-intro p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--jsp-muted);
+}
+
+.jsp-prep-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.jsp-prep-empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--jsp-muted);
+}
+
+.jsp-prep-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.jsp-prep-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(420px, 55vh);
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.jsp-prep-welcome p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--jsp-muted);
+}
+
+.jsp-prep-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.jsp-prep-msg-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--jsp-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.jsp-prep-msg-body {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--jsp-text);
+}
+
+.jsp-prep-msg-body p {
+  margin: 0 0 8px;
+}
+
+.jsp-prep-msg-body p:last-child {
+  margin-bottom: 0;
+}
+
+.jsp-prep-msg-user .jsp-prep-msg-body {
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  align-self: flex-end;
+}
+
+.jsp-prep-msg-assistant .jsp-prep-msg-body {
+  background: var(--jsp-surface);
+  border: 1px solid var(--jsp-border);
+}
+
+.jsp-prep-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.jsp-prep-chip {
+  border: 1px solid var(--jsp-border);
+  background: var(--jsp-bg);
+  color: var(--jsp-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.jsp-prep-chip:hover {
+  border-color: var(--jsp-accent);
+  color: var(--jsp-accent);
+  background: #eff6ff;
+}
+
+.jsp-prep-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--jsp-border);
+}
+
+.jsp-prep-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+  max-height: 140px;
+  border: 1px solid var(--jsp-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--jsp-text);
+  background: var(--jsp-bg);
+  box-sizing: border-box;
+}
+
+.jsp-prep-form textarea:focus {
+  outline: none;
+  border-color: var(--jsp-accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.jsp-prep-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.jsp-prep-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--jsp-muted);
+}
+
+.jsp-prep-status-error {
+  color: #b91c1c;
 }

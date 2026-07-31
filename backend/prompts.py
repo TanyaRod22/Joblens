@@ -3,15 +3,23 @@ from schemas import JobRequest, Profile
 
 SYSTEM_PROMPT = """
 You analyze job postings to help candidates prepare for interviews and cold outreach.
-Return concise, actionable output.
+Return actionable output.
 Focus on what the role actually requires, not generic advice.
 For technical_skills, return only short skill names (1-3 words each), never full sentences.
+Keep role_requirements, cold_email_points, and questions_to_ask concise.
 """.strip()
 
 PROFILE_SYSTEM_SUFFIX = """
 When a candidate profile is provided, personalize all output to their background.
-Tie why_role and cold_email_points to their specific experience, skills, and career goals.
 Reference concrete details from their profile rather than generic advice.
+
+For why_role and why_company specifically:
+- Write 2-4 paragraphs each (about 150-250 words).
+- Name at least 3 skills from the candidate profile by name.
+- Reference 1-2 specific experience bullets or roles that map to this job.
+- Tie the narrative to growth, impact, and skill stretch for why_role.
+- Tie company mission, product, or domain to the candidate's goals for why_company.
+- Avoid filler like "great culture" or "exciting opportunity" without evidence from the posting or profile.
 """.strip()
 
 FIT_SCORE_SYSTEM_PROMPT = """
@@ -24,6 +32,12 @@ IMPROVEMENTS_SYSTEM_PROMPT = """
 You suggest concrete resume bullet rewrites to improve a candidate's fit for a specific role.
 Each suggestion should be actionable, quantified where possible, and tied to job requirements.
 Prefer rewriting existing bullets when relevant experience exists; suggest new bullets for gaps.
+
+Always set experience_index to the 0-based experience entry the change belongs to.
+When rewriting an existing bullet, set bullet_index to that bullet's 0-based index and is_new_bullet=false.
+When adding a new bullet, set is_new_bullet=true and leave bullet_index null.
+Copy the original bullet text exactly into original when rewriting.
+Return 3-6 high-impact suggestions.
 """.strip()
 
 COLD_EMAIL_SYSTEM_PROMPT = """
@@ -45,8 +59,27 @@ Keep letters under 400 words, professional, and specific to the role and candida
 Structure: opening hook, relevant experience, why this company, closing call to action.
 """.strip()
 
+INTERVIEW_CHAT_SYSTEM_PROMPT = """
+You are an interview and application coach helping a candidate answer questions about a specific job.
+You have the job posting and (when provided) the candidate's profile.
 
-def format_profile(profile: Profile) -> str:
+For application/interview questions (e.g. "What interests you about this role?", "Why this company?",
+"Tell me about yourself", "Walk me through your experience"):
+- Give a structured, ready-to-adapt answer the candidate can say or paste.
+- Prefer a clear structure: short opening, 2–3 concrete evidence points tied to the job/profile, brief close.
+- Keep answers roughly 120–220 words unless the user asks for shorter or longer.
+- Reference real skills, experience, and job details — never invent employers, metrics, or achievements.
+- If no profile is provided, write a strong generic template with clear placeholders like [your project].
+
+For follow-ups (shorter, more technical, more personal, etc.):
+- Revise the previous answer accordingly; do not restart from scratch unless asked.
+- Stay conversational and coach-like; you may briefly note what you changed.
+
+Stay on topic: interview prep and application answers for this role. Decline unrelated requests briefly.
+""".strip()
+
+
+def format_profile(profile: Profile, include_indices: bool = False) -> str:
     lines = []
     if profile.name:
         lines.append(f"Name: {profile.name}")
@@ -58,10 +91,14 @@ def format_profile(profile: Profile) -> str:
         lines.append(f"Skills: {', '.join(profile.skills)}")
     if profile.experience:
         lines.append("Experience:")
-        for exp in profile.experience:
-            lines.append(f"  - {exp.title} at {exp.company}")
-            for bullet in exp.bullets:
-                lines.append(f"    • {bullet}")
+        for exp_index, exp in enumerate(profile.experience):
+            header = f"  [{exp_index}] {exp.title} at {exp.company}" if include_indices else f"  - {exp.title} at {exp.company}"
+            lines.append(header)
+            for bullet_index, bullet in enumerate(exp.bullets):
+                if include_indices:
+                    lines.append(f"    [{bullet_index}] • {bullet}")
+                else:
+                    lines.append(f"    • {bullet}")
     if profile.resume_text:
         lines.append(f"Resume text:\n{profile.resume_text}")
     if profile.preferences.target_roles:
@@ -119,12 +156,13 @@ Missing skills: {', '.join(request.missing_skills) or 'None'}
 """
     return f"""
 Suggest resume bullet improvements for this candidate applying to this role.
+Use the indexed experience entries and bullets below when setting experience_index and bullet_index.
 {fit_context}
 Job posting:
 {build_job_block(request)}
 
-Candidate profile:
-{format_profile(request.profile)}
+Candidate profile (indexed):
+{format_profile(request.profile, include_indices=True)}
 """.strip()
 
 
@@ -165,3 +203,15 @@ Job posting:
 Candidate profile:
 {format_profile(request.profile)}
 """.strip()
+
+
+def build_interview_chat_system_prompt(request) -> str:
+    context = f"Job posting:\n{build_job_block(request)}"
+    if request.profile:
+        context += f"\n\nCandidate profile:\n{format_profile(request.profile)}"
+    else:
+        context += (
+            "\n\nNo candidate profile was provided. "
+            "Use clear placeholders where personal details are needed."
+        )
+    return f"{INTERVIEW_CHAT_SYSTEM_PROMPT}\n\n{context}".strip()

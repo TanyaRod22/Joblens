@@ -1,5 +1,7 @@
 importScripts("config.js");
 
+chrome.runtime.setUninstallURL("https://joblens-ext.netlify.app/feedback");
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) return;
 

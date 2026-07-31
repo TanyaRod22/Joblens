@@ -13,6 +13,7 @@ from prompts import (
     build_cover_letter_prompt,
     build_fit_score_prompt,
     build_improvements_prompt,
+    build_interview_chat_system_prompt,
     build_parse_resume_prompt,
     build_system_prompt,
     build_user_prompt,
@@ -24,6 +25,8 @@ from schemas import (
     FitScoreResponse,
     ImprovementsRequest,
     ImprovementsResponse,
+    InterviewChatRequest,
+    InterviewChatResponse,
     JobRequest,
     JobResponse,
     JobWithProfileRequest,
@@ -101,3 +104,30 @@ async def parse_resume(resume_text: str) -> ParseResumeResponse:
         build_parse_resume_prompt(resume_text),
         ParseResumeResponse,
     )
+
+
+async def interview_chat(request: InterviewChatRequest) -> InterviewChatResponse:
+    if not request.messages:
+        raise ValueError("At least one message is required")
+
+    allowed_roles = {"user", "assistant"}
+    chat_messages = [{"role": "system", "content": build_interview_chat_system_prompt(request)}]
+    for message in request.messages[-12:]:
+        role = (message.role or "").strip().lower()
+        content = (message.content or "").strip()
+        if role not in allowed_roles or not content:
+            continue
+        chat_messages.append({"role": role, "content": content})
+
+    if len(chat_messages) < 2 or chat_messages[-1]["role"] != "user":
+        raise ValueError("Conversation must end with a user message")
+
+    completion = await _client.beta.chat.completions.parse(
+        model=MODEL,
+        messages=chat_messages,
+        response_format=InterviewChatResponse,
+    )
+    result = completion.choices[0].message.parsed
+    if result is None:
+        raise ValueError("OpenAI returned no parsed response")
+    return result
