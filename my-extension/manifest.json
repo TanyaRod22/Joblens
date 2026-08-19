@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Joblens",
-  "version": "1.0.5",
+  "version": "1.0.7",
   "description": "Analyze job postings and get personalized interview prep, fit scores, and outreach drafts for your job search.",
   "homepage_url": "https://joblens-production-928c.up.railway.app/privacy",
   "action": {
@@ -26,7 +26,9 @@
         "https://jobs.ashbyhq.com/*",
         "https://www.ashbyhq.com/*",
         "https://www.indeed.com/*",
-        "https://*.notion.site/*"
+        "https://*.notion.site/*",
+        "https://joinhandshake.com/*",
+        "https://*.joinhandshake.com/*"
       ],
       "js": ["config.js", "profile.js", "content.js"],
       "css": ["panel.css"],
@@ -38,13 +40,15 @@
       "resources": ["Insightlens.png"],
       "matches": [
         "https://www.linkedin.com/*",
-        "https://boards.greenhouse.io/*",
+        "https://job-boards.greenhouse.io/*",
         "https://jobs.lever.co/*",
         "https://*.myworkdayjobs.com/*",
         "https://jobs.ashbyhq.com/*",
         "https://www.ashbyhq.com/*",
         "https://www.indeed.com/*",
-        "https://*.notion.site/*"
+        "https://*.notion.site/*",
+        "https://joinhandshake.com/*",
+        "https://*.joinhandshake.com/*"
       ]
     }
   ]

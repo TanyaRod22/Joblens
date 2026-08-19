@@ -801,6 +801,10 @@ function looksLikePageChrome(text) {
     "job search faster with premium",
     "you are on the messaging overlay",
     "search by title, skill, or company",
+    "jobs for you",
+    "saved jobs",
+    "career interests",
+    "on-campus interviews",
   ];
   return signals.filter((signal) => sample.includes(signal)).length >= 2;
 }
@@ -824,6 +828,9 @@ function cleanJobDescriptionText(text) {
     /\n\s*People also viewed\b[\s\S]*$/i,
     /\n\s*Are these results helpful\?[\s\S]*$/i,
     /\n\s*Set job alert for\b[\s\S]*$/i,
+    /\n\s*About the employer\b[\s\S]*$/i,
+    /\n\s*Similar jobs\b[\s\S]*$/i,
+    /\n\s*More jobs like this\b[\s\S]*$/i,
   ];
   for (const marker of cutMarkers) {
     cleaned = cleaned.replace(marker, "").trim();
@@ -978,6 +985,233 @@ function scrapeLinkedInDescription(detailRoot) {
   return null;
 }
 
+function isHandshakeHost(host = window.location.hostname) {
+  return /joinhandshake\.com$/i.test(host) || host.includes("joinhandshake.com");
+}
+
+function isHandshakeJobCard(el) {
+  if (!el) return false;
+  const hook = `${el.getAttribute("data-hook") || ""} ${el.getAttribute("data-testid") || ""}`.toLowerCase();
+  if (hook.includes("job-result-card") || hook.includes("search-result") || hook.includes("job-card")) {
+    return true;
+  }
+  return Boolean(el.closest('[data-hook*="job-result-card"], [data-hook*="search-result"], [data-testid*="job-card"]'));
+}
+
+function handshakeCardCount(el) {
+  if (!el?.querySelectorAll) return 0;
+  return el.querySelectorAll(
+    '[data-hook*="job-result-card"], [data-hook*="search-result"], a[href*="/jobs/"][href*="postings"]'
+  ).length;
+}
+
+function scoreHandshakeDetailPane(el) {
+  if (!el || el.id === ROOT_ID || el.closest(`#${ROOT_ID}`)) return -100;
+  if (isHandshakeJobCard(el)) return -50;
+
+  const text = (el.innerText || "").trim();
+  if (text.length < 80) return -10;
+
+  const lower = text.toLowerCase();
+  let score = 0;
+  if (el.querySelector("h1")) score += 3;
+  if (/\bjob description\b/.test(lower)) score += 5;
+  if (/\bqualifications\b|\bwho we.?re looking for\b|\bwhat you.?ll do\b/.test(lower)) score += 3;
+  if (/\bapply\b/.test(lower)) score += 2;
+  if (/\babout the employer\b|\babout the company\b/.test(lower)) score += 2;
+  if (el.querySelector('a[href*="/employers/"], a[href*="/emp/"], a[href*="/stu/employers"]')) score += 2;
+  if (text.length >= 400) score += 2;
+  if (text.length >= 1200) score += 2;
+
+  const cards = handshakeCardCount(el);
+  if (cards > 2) score -= 12;
+  if (cards > 8) score -= 20;
+
+  return score;
+}
+
+function expandHandshakeDescription(detailRoot) {
+  const roots = [detailRoot, document].filter(Boolean);
+  const expandLabels = [
+    "job description",
+    "qualifications",
+    "who we're looking for",
+    "who we are looking for",
+    "what you'll do",
+    "what you will do",
+    "see more",
+    "show more",
+    "read more",
+    "view more",
+  ];
+
+  for (const root of roots) {
+    const clickables = root.querySelectorAll('button, [role="button"], [aria-expanded="false"]');
+    for (const btn of clickables) {
+      if (detailRoot && root === document && !detailRoot.contains(btn)) continue;
+      const label = `${btn.innerText || ""} ${btn.getAttribute("aria-label") || ""}`.toLowerCase().trim();
+      if (!label || label.length > 80) continue;
+      if (!expandLabels.some((item) => label.includes(item))) continue;
+      try {
+        btn.click();
+      } catch {
+        // ignore click failures
+      }
+    }
+  }
+}
+
+function getHandshakeDetailRoot() {
+  const selectors = [
+    '[data-hook="job-details"]',
+    '[data-hook="jobs-show"]',
+    '[data-hook="posting-details"]',
+    '[data-hook*="job-preview"]',
+    '[data-hook*="JobPreview"]',
+    '[data-testid="job-details"]',
+    '[data-testid*="job-preview"]',
+    'aside[aria-label*="job" i]',
+    '[class*="JobPreview"]',
+    '[class*="job-preview"]',
+    '[class*="JobDetails"]',
+    '[class*="job-details"]',
+    '[role="dialog"]',
+    "main article",
+    '[role="main"] article',
+  ];
+
+  let best = null;
+  let bestScore = 2;
+
+  for (const selector of selectors) {
+    for (const el of document.querySelectorAll(selector)) {
+      const score = scoreHandshakeDetailPane(el);
+      if (score > bestScore) {
+        best = el;
+        bestScore = score;
+      }
+    }
+  }
+
+  const layoutCandidates = [
+    ...document.querySelectorAll("main > *, [role='main'] > *, aside, article, section"),
+  ];
+  for (const el of layoutCandidates) {
+    const score = scoreHandshakeDetailPane(el);
+    if (score > bestScore) {
+      best = el;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
+function extractHandshakeJdFromText(raw) {
+  let text = (raw || "").replace(/\r/g, "").trim();
+  if (!text) return "";
+
+  const startMatch = text.match(
+    /\b(Job description|Position overview|About this (?:job|role)|What you.?ll do|What you will do|Responsibilities)\b\s*([\s\S]+)/i
+  );
+  if (startMatch?.[2]) {
+    text = `${startMatch[1]}\n${startMatch[2]}`.trim();
+  }
+
+  text = cleanJobDescriptionText(text);
+
+  if (!text || text.length < 120 || looksLikePageChrome(text)) return "";
+
+  const lower = text.toLowerCase();
+  const jobSignals = [
+    "responsib",
+    "experience",
+    "about",
+    "role",
+    "require",
+    "qualification",
+    "intern",
+    "engineer",
+    "team",
+    "student",
+    "skill",
+    "description",
+  ];
+  const hits = jobSignals.filter((signal) => lower.includes(signal)).length;
+  if (hits < 2) return "";
+
+  return text;
+}
+
+function scrapeHandshakeDescription(detailRoot) {
+  expandHandshakeDescription(detailRoot);
+
+  const descriptionSelectors = [
+    '[data-hook*="job-description"]',
+    '[data-hook*="description"]',
+    '[data-testid*="job-description"]',
+    '[class*="job-description"]',
+    '[class*="JobDescription"]',
+    "article",
+  ];
+
+  if (detailRoot) {
+    for (const selector of descriptionSelectors) {
+      const el = detailRoot.querySelector(selector);
+      if (!el || isHandshakeJobCard(el)) continue;
+      const extracted = extractHandshakeJdFromText(el.innerText || "");
+      if (extracted) return { text: extracted, source: "handshake-detail" };
+    }
+
+    const fromPane = extractHandshakeJdFromText(detailRoot.innerText || "");
+    if (fromPane) return { text: fromPane, source: "handshake-stripped" };
+  }
+
+  const wideRoots = [
+    detailRoot?.innerText,
+    document.querySelector("main")?.innerText,
+    document.body?.innerText?.slice(0, 20000),
+  ].filter(Boolean);
+
+  for (const raw of wideRoots) {
+    const extracted = extractHandshakeJdFromText(raw);
+    if (extracted) return { text: extracted, source: "handshake-stripped" };
+  }
+
+  return null;
+}
+
+function findHandshakeCompany(detailRoot) {
+  const root = detailRoot || document;
+  const companyLink = root.querySelector(
+    'a[href*="/employers/"], a[href*="/stu/employers"], a[href*="/emp/employers"], a[href*="/emp/"]'
+  );
+  const companyText = companyLink?.innerText?.trim();
+  if (companyText && companyText.length < 80) return companyText;
+
+  return (
+    pickText(
+      ['[data-hook*="employer"]', '[data-testid*="employer"]', '[class*="employer-name"]', '[class*="EmployerName"]'],
+      root
+    ) || null
+  );
+}
+
+function findHandshakeLocation(detailRoot) {
+  const root = detailRoot || document;
+  return (
+    pickText(
+      [
+        '[data-hook*="location"]',
+        '[data-testid*="job-location"]',
+        '[class*="job-location"]',
+        '[aria-label*="location" i]',
+      ],
+      root
+    ) || findLabelValue("Location")
+  );
+}
+
 function getJsonLdJobPosting() {
   for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
     try {
@@ -1041,6 +1275,18 @@ function parseTitleFromDocumentTitle() {
   if (last.includes("linkedin")) {
     return {
       title: parts[0],
+      company: parts.length >= 3 ? parts[1] : null,
+    };
+  }
+
+  if (last.includes("handshake")) {
+    const headline = parts[0];
+    const atMatch = headline.match(/^(.+?)\s+at\s+(.+)$/i);
+    if (atMatch) {
+      return { title: atMatch[1].trim(), company: atMatch[2].trim() };
+    }
+    return {
+      title: headline,
       company: parts.length >= 3 ? parts[1] : null,
     };
   }
@@ -1177,7 +1423,7 @@ function findLinkedInLocation() {
 }
 
 function scrapeCompanyLogo() {
-  const detailRoot = getLinkedInDetailRoot();
+  const detailRoot = getLinkedInDetailRoot() || (isHandshakeHost() ? getHandshakeDetailRoot() : null);
   const scopedRoot = detailRoot || document;
   const logoImg = scopedRoot.querySelector(
     [
@@ -1215,7 +1461,7 @@ const DESCRIPTION_SELECTORS = [
 function computeScrapeConfidence(source, description) {
   const length = (description || "").trim().length;
 
-  if (source === "linkedin-miss" || source === "body-fallback") {
+  if (source === "linkedin-miss" || source === "handshake-miss" || source === "body-fallback") {
     return "low";
   }
 
@@ -1223,7 +1469,9 @@ function computeScrapeConfidence(source, description) {
     source === "json-ld" ||
     source === "selector" ||
     source === "linkedin-detail" ||
-    source === "linkedin-stripped"
+    source === "linkedin-stripped" ||
+    source === "handshake-detail" ||
+    source === "handshake-stripped"
   ) {
     if (length >= 300) return "high";
     if (length >= 150) return "medium";
@@ -1240,21 +1488,26 @@ function computeScrapeConfidence(source, description) {
 function scrapeJobPage() {
   const host = window.location.hostname;
   const isLinkedIn = host.includes("linkedin.com");
+  const isHandshake = isHandshakeHost(host);
   const jsonLd = getJsonLdJobPosting();
   const titleFromPage = parseTitleFromDocumentTitle();
   const linkedInDetail = isLinkedIn ? getLinkedInDetailRoot() : null;
+  const handshakeDetail = isHandshake ? getHandshakeDetailRoot() : null;
+  const siteDetail = linkedInDetail || handshakeDetail;
 
   let title =
     jsonLd?.title ||
-    (linkedInDetail
+    (siteDetail
       ? pickText(
           [
             ".jobs-unified-top-card__job-title",
             ".job-details-jobs-unified-top-card__job-title",
             "h1.t-24",
+            '[data-hook*="job-title"]',
+            '[data-testid*="job-title"]',
             "h1",
           ],
-          linkedInDetail
+          siteDetail
         )
       : null) ||
     pickText([
@@ -1272,6 +1525,7 @@ function scrapeJobPage() {
   let company =
     jsonLd?.hiringOrganization?.name ||
     (isLinkedIn ? findLinkedInCompany() : null) ||
+    (isHandshake ? findHandshakeCompany(handshakeDetail) : null) ||
     pickText([
       ".company-name",
       ".employer-name",
@@ -1287,6 +1541,7 @@ function scrapeJobPage() {
   let location =
     parseLocationFromJsonLd(jsonLd?.jobLocation) ||
     (isLinkedIn ? findLinkedInLocation() : null) ||
+    (isHandshake ? findHandshakeLocation(handshakeDetail) : null) ||
     pickText([
       ".location",
       '[data-testid="job-location"]',
@@ -1334,6 +1589,23 @@ function scrapeJobPage() {
       description = "";
       scrapeSource = "linkedin-miss";
     }
+  } else if (isHandshake) {
+    const handshakeResult = scrapeHandshakeDescription(handshakeDetail);
+    if (handshakeResult?.text) {
+      description = handshakeResult.text;
+      scrapeSource = handshakeResult.source;
+    } else if (jsonLd?.description) {
+      const fromJsonLd = extractHandshakeJdFromText(stripHtmlToText(jsonLd.description));
+      if (fromJsonLd) {
+        description = fromJsonLd;
+        scrapeSource = "json-ld";
+      }
+    }
+
+    if (!description) {
+      description = "";
+      scrapeSource = "handshake-miss";
+    }
   } else if (jsonLd?.description) {
     description = cleanJobDescriptionText(stripHtmlToText(jsonLd.description));
     scrapeSource = "json-ld";
@@ -1355,13 +1627,17 @@ function scrapeJobPage() {
   }
 
   if (description && looksLikePageChrome(description)) {
-    const recovered = isLinkedIn ? extractLinkedInJdFromText(description) : "";
+    const recovered = isLinkedIn
+      ? extractLinkedInJdFromText(description)
+      : isHandshake
+        ? extractHandshakeJdFromText(description)
+        : "";
     if (recovered) {
       description = recovered;
-      scrapeSource = "linkedin-stripped";
+      scrapeSource = isHandshake ? "handshake-stripped" : "linkedin-stripped";
     } else {
       description = "";
-      scrapeSource = isLinkedIn ? "linkedin-miss" : "body-fallback";
+      scrapeSource = isLinkedIn ? "linkedin-miss" : isHandshake ? "handshake-miss" : "body-fallback";
     }
   }
 
@@ -2136,6 +2412,15 @@ function showManualPasteView(job) {
   } else if (job.scrapeSource === "linkedin-miss") {
     hint.textContent =
       "Couldn't isolate the LinkedIn job description automatically. Paste the job description below.";
+  } else if (
+    shouldPrefillDescription &&
+    (job.scrapeSource === "handshake-stripped" || job.scrapeSource === "handshake-detail")
+  ) {
+    hint.textContent =
+      "We auto-filled a cleaned Handshake job description. Review it, edit if needed, then Analyze.";
+  } else if (job.scrapeSource === "handshake-miss") {
+    hint.textContent =
+      "Couldn't isolate the Handshake job description automatically. Open the job on the right, expand Job description, then paste it below if needed.";
   } else if (job.scrapeSource === "body-fallback") {
     hint.textContent =
       "This page layout isn't recognized. Paste the full job description below for accurate analysis.";
