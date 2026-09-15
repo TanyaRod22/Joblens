@@ -90,7 +90,7 @@ function createPanel() {
       <nav class="jsp-tabs" aria-label="Panel sections">
         <button type="button" class="jsp-tab jsp-tab-active" data-tab="scan">Scan</button>
         <button type="button" class="jsp-tab" data-tab="prep">Prep</button>
-        <button type="button" class="jsp-tab" data-tab="improve">Improve</button>
+        <!-- <button type="button" class="jsp-tab" data-tab="improve">Improve</button> -->
         <button type="button" class="jsp-tab" data-tab="profile">Profile</button>
       </nav>
 
@@ -132,14 +132,14 @@ function createPanel() {
           <div id="jsp-generated-output" class="jsp-hidden"></div>
         </section>
 
-        <section class="jsp-view jsp-improve-view" id="jsp-view-improve">
+        <!-- <section class="jsp-view jsp-improve-view" id="jsp-view-improve">
           <div class="jsp-improve-intro">
             <h2>Resume improvements</h2>
             <p id="jsp-improve-subtitle">Scan a job with your profile included to get tailored bullet suggestions.</p>
           </div>
           <p id="jsp-improve-job-meta" class="jsp-improve-job-meta jsp-hidden"></p>
           <div id="jsp-improve-content"></div>
-        </section>
+        </section> -->
 
         <section class="jsp-view jsp-prep-view" id="jsp-view-prep">
           <div class="jsp-prep-intro">
@@ -163,7 +163,7 @@ function createPanel() {
               ></textarea>
               <div class="jsp-prep-form-actions">
                 <button type="button" class="jsp-btn-text" id="jsp-prep-clear">Clear chat</button>
-                <button type="submit" class="jsp-btn-primary" id="jsp-prep-send">Send</button>
+                <button type="button" class="jsp-btn-primary" id="jsp-prep-send">Send</button>
               </div>
             </form>
             <p id="jsp-prep-status" class="jsp-prep-status jsp-hidden" role="status"></p>
@@ -346,14 +346,26 @@ function bindPanelEvents() {
   bindResumeUploadEvents();
   document.getElementById("jsp-gen-email")?.addEventListener("click", () => handleGenerateColdEmail());
   document.getElementById("jsp-gen-letter")?.addEventListener("click", () => handleGenerateCoverLetter());
-  document.getElementById("jsp-prep-form")?.addEventListener("submit", (event) => handlePrepSubmit(event));
+  // Use button click (not form submit) — host pages often cancel submit events.
+  document.getElementById("jsp-prep-send")?.addEventListener("click", () => submitPrepInput());
+  document.getElementById("jsp-prep-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    submitPrepInput();
+  });
   document.getElementById("jsp-prep-clear")?.addEventListener("click", () => clearPrepChat());
   document.getElementById("jsp-prep-goto-scan")?.addEventListener("click", () => setTab("scan"));
-  document.getElementById("jsp-prep-input")?.addEventListener("keydown", (event) => {
+  const prepInput = document.getElementById("jsp-prep-input");
+  prepInput?.addEventListener("keydown", (event) => {
+    // Bubble-phase only — capture-phase stopPropagation would block typing in the textarea.
+    event.stopPropagation();
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      document.getElementById("jsp-prep-form")?.requestSubmit();
+      submitPrepInput();
     }
+  });
+  ["keyup", "keypress", "paste", "cut", "copy"].forEach((type) => {
+    prepInput?.addEventListener(type, (event) => event.stopPropagation());
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closePanel();
@@ -1986,7 +1998,10 @@ function renderPrepPanel() {
   const sendBtn = document.getElementById("jsp-prep-send");
   const input = document.getElementById("jsp-prep-input");
   if (sendBtn) sendBtn.disabled = prepSending;
-  if (input) input.disabled = prepSending;
+  if (input) {
+    input.disabled = prepSending;
+    input.readOnly = false;
+  }
 }
 
 function clearPrepChat() {
@@ -1996,11 +2011,10 @@ function clearPrepChat() {
   renderPrepPanel();
 }
 
-async function handlePrepSubmit(event) {
-  event.preventDefault();
+async function submitPrepInput() {
   const input = document.getElementById("jsp-prep-input");
   const text = (input?.value || "").trim();
-  if (!text) return;
+  if (!text || prepSending) return;
   if (input) input.value = "";
   await sendPrepMessage(text);
 }
@@ -2277,21 +2291,21 @@ function renderResults(job, analysis, options = {}) {
     renderSection("Questions to Ask", renderListItems(analysis.questions_to_ask)),
   ];
 
-  if (personalized) {
-    const suggestionCount =
-      currentTailoredDraft?.suggestions?.length || improvements?.suggestions?.length || 0;
-    if (suggestionCount) {
-      sections.push(
-        renderSection(
-          "Resume improvements",
-          `<p class="jsp-text">${suggestionCount} tailored suggestion${suggestionCount === 1 ? "" : "s"} ready.</p>
-           <div class="jsp-section-actions">
-             <button type="button" class="jsp-btn-secondary" id="jsp-goto-improve">Open Improve tab</button>
-           </div>`
-        )
-      );
-    }
-  }
+  // if (personalized) {
+  //   const suggestionCount =
+  //     currentTailoredDraft?.suggestions?.length || improvements?.suggestions?.length || 0;
+  //   if (suggestionCount) {
+  //     sections.push(
+  //       renderSection(
+  //         "Resume improvements",
+  //         `<p class="jsp-text">${suggestionCount} tailored suggestion${suggestionCount === 1 ? "" : "s"} ready.</p>
+  //          <div class="jsp-section-actions">
+  //            <button type="button" class="jsp-btn-secondary" id="jsp-goto-improve">Open Improve tab</button>
+  //          </div>`
+  //       )
+  //     );
+  //   }
+  // }
 
   document.getElementById("jsp-results-sections").innerHTML = sections.join("");
   bindAccordionEvents();

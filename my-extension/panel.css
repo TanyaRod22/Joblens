@@ -412,7 +412,7 @@
 
 .jsp-section-body {
   display: none;
-  padding: 0 16px 14px;
+  padding: 5px 16px 14px;
   border-top: 1px solid var(--jsp-border);
 }
 
@@ -532,7 +532,7 @@
 .jsp-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .jsp-field span {
@@ -846,7 +846,7 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--jsp-text);
-  margin: 10px 0;
+  margin: 5px 0;
 }
 
 .jsp-exp-entry {
@@ -994,7 +994,7 @@
 
 .jsp-fit-details p,
 .jsp-fit-summary {
-  margin: 0;
+  margin: 10px 0 0 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--jsp-muted);
@@ -1346,9 +1346,15 @@
   padding: 10px 12px;
   font: inherit;
   font-size: 13px;
+  line-height: 1.45;
   color: var(--jsp-text);
   background: var(--jsp-bg);
   box-sizing: border-box;
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -webkit-user-modify: read-write !important;
+  caret-color: var(--jsp-text);
 }
 
 .jsp-prep-form textarea:focus {
