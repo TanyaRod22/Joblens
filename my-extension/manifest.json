@@ -19,6 +19,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://wellfound.com/*",
         "https://www.linkedin.com/*",
         "https://job-boards.greenhouse.io/*",
         "https://jobs.lever.co/*",
@@ -48,7 +49,8 @@
         "https://www.indeed.com/*",
         "https://*.notion.site/*",
         "https://joinhandshake.com/*",
-        "https://*.joinhandshake.com/*"
+        "https://*.joinhandshake.com/*",
+        "https://wellfound.com/*"
       ]
     }
   ]
