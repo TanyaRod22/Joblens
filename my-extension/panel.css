@@ -947,7 +947,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
 }
 
 .jsp-fit-high {
@@ -994,7 +994,7 @@
 
 .jsp-fit-details p,
 .jsp-fit-summary {
-  margin: 10px 0 0 0;
+  margin: 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--jsp-muted);
