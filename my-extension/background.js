@@ -10,7 +10,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   } catch {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ["config.js", "profile.js", "content.js"],
+      files: ["config.js", "profile.js", "matches.js", "content.js"],
     });
     await chrome.tabs.sendMessage(tab.id, { action: "toggle-panel" });
   }
@@ -82,6 +82,28 @@ async function uploadResumeFile({ fileName, fileType, fileBytes }) {
   return response.json();
 }
 
+async function fetchTextUrl({ url }) {
+  if (!url || typeof url !== "string") {
+    throw new Error("A URL is required");
+  }
+
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "omit",
+    headers: {
+      Accept: "application/json, text/html, text/plain;q=0.9,*/*;q=0.8",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch board data (${response.status})`);
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+  return { text, contentType, finalUrl: response.url || url };
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === "api-json") {
     postJsonApi(message)
@@ -92,6 +114,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.action === "parse-resume") {
     uploadResumeFile(message)
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message.action === "fetch-text") {
+    fetchTextUrl(message)
       .then((data) => sendResponse({ ok: true, data }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;

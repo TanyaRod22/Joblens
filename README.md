@@ -94,9 +94,17 @@ Also add the same origin to `ALLOWED_ORIGINS` in the backend `.env`.
 ### 4. Use the extension
 
 1. Open a job posting (LinkedIn, Greenhouse, Lever, etc.)
-2. Click the JobScrapper icon or floating tab on the right edge
+2. Click the Joblens icon or floating tab on the right edge
 3. Click **Scan Job**
 4. If the page scrape is low confidence, paste the job description manually and click **Analyze**
+
+### Matches (careers board shortlist)
+
+1. Save your profile (Profile tab)
+2. Open a company careers **board** (Greenhouse, Lever, or Ashby listing page — not a single job)
+3. Open the panel → **Matches** → **Find matches**
+4. Adjust the minimum fit threshold if needed (default 80%)
+5. Click a card to open that posting in a new tab, then **Scan** there for full prep / apply
 
 ## Production deployment
 
@@ -145,8 +153,32 @@ Returns `{ "status": "ok" }`.
 - `429` — rate limit exceeded
 - `500` — OpenAI or server error
 
+### `POST /score-fit-batch`
+
+Scores up to 8 jobs against one profile in a single request (used by the Matches tab).
+
+**Request body:**
+
+```json
+{
+  "profile": { "name": "...", "skills": ["..."], "experience": [] },
+  "jobs": [
+    {
+      "title": "Software Engineer",
+      "company": "Acme Inc.",
+      "location": "Remote",
+      "description": "Full job description text...",
+      "url": "https://..."
+    }
+  ]
+}
+```
+
+**Response:** `{ "results": [{ "url": "...", "score": 88, "matched_skills": ["..."], "missing_skills": ["..."], "summary": "...", "error": null }] }`
+
 ## Notes
 
 - The OpenAI API key lives only on the backend, never in the extension.
 - Job text is sent to your backend and then to OpenAI for analysis.
 - LinkedIn and Workday pages vary; use the manual paste fallback when scraping is unreliable.
+- Matches uses public Greenhouse / Lever / Ashby board APIs when available, then filters by fit score.

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Joblens",
-  "version": "1.0.7",
+  "version": "1.1.0",
   "description": "Analyze job postings and get personalized interview prep, fit scores, and outreach drafts for your job search.",
   "homepage_url": "https://joblens-production-928c.up.railway.app/privacy",
   "action": {
@@ -14,13 +14,21 @@
   },
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
-    "https://joblens-production-928c.up.railway.app/*"
+    "https://joblens-production-928c.up.railway.app/*",
+    "https://boards-api.greenhouse.io/*",
+    "https://boards.greenhouse.io/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://api.lever.co/*",
+    "https://jobs.lever.co/*",
+    "https://api.ashbyhq.com/*",
+    "https://jobs.ashbyhq.com/*"
   ],
   "content_scripts": [
     {
       "matches": [
         "https://wellfound.com/*",
         "https://www.linkedin.com/*",
+        "https://boards.greenhouse.io/*",
         "https://job-boards.greenhouse.io/*",
         "https://jobs.lever.co/*",
         "https://*.myworkdayjobs.com/*",
@@ -31,7 +39,7 @@
         "https://joinhandshake.com/*",
         "https://*.joinhandshake.com/*"
       ],
-      "js": ["config.js", "profile.js", "content.js"],
+      "js": ["config.js", "profile.js", "matches.js", "content.js"],
       "css": ["panel.css"],
       "run_at": "document_idle"
     }
@@ -41,6 +49,7 @@
       "resources": ["Insightlens.png"],
       "matches": [
         "https://www.linkedin.com/*",
+        "https://boards.greenhouse.io/*",
         "https://job-boards.greenhouse.io/*",
         "https://jobs.lever.co/*",
         "https://*.myworkdayjobs.com/*",

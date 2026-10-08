@@ -581,7 +581,8 @@
   border: none;
   background: transparent;
   color: var(--jsp-muted);
-  font-size: 12px;
+  font-size: 11px;
+  white-space: nowrap;
   font-weight: 600;
   padding: 8px 8px;
   border-radius: 8px;
@@ -1379,3 +1380,243 @@
 .jsp-prep-status-error {
   color: #b91c1c;
 }
+
+/* Matches tab */
+.jsp-matches-view {
+  gap: 12px;
+}
+
+.jsp-matches-intro h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--jsp-text);
+}
+
+.jsp-matches-intro p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--jsp-muted);
+}
+
+.jsp-matches-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--jsp-muted);
+  background: var(--jsp-surface);
+  border: 1px solid var(--jsp-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.jsp-matches-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.jsp-matches-controls .jsp-btn-primary,
+.jsp-matches-controls .jsp-btn-secondary {
+  flex: 1;
+}
+
+.jsp-matches-threshold-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--jsp-muted);
+}
+
+.jsp-matches-threshold-row label {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.jsp-matches-threshold-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--jsp-accent);
+}
+
+#jsp-matches-threshold-value {
+  min-width: 36px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--jsp-text);
+}
+
+.jsp-matches-status {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--jsp-muted);
+}
+
+.jsp-matches-status-error {
+  color: #b91c1c;
+}
+
+.jsp-matches-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.jsp-matches-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--jsp-surface);
+  border: 1px solid var(--jsp-border);
+  overflow: hidden;
+}
+
+.jsp-matches-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--jsp-accent);
+  transition: width 0.25s ease;
+}
+
+#jsp-matches-progress-label {
+  font-size: 11px;
+  color: var(--jsp-muted);
+}
+
+.jsp-matches-summary {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--jsp-text);
+}
+
+.jsp-matches-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.jsp-match-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--jsp-border);
+  border-radius: 12px;
+  background: var(--jsp-bg);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  font: inherit;
+  color: inherit;
+}
+
+.jsp-match-card:hover {
+  border-color: #bfdbfe;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
+  transform: translateY(-1px);
+}
+
+.jsp-match-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.jsp-match-card-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.jsp-match-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--jsp-text);
+  line-height: 1.35;
+}
+
+.jsp-match-meta {
+  font-size: 12px;
+  color: var(--jsp-muted);
+  line-height: 1.35;
+}
+
+.jsp-match-score {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--jsp-border);
+}
+
+.jsp-match-score-number {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.jsp-match-score-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--jsp-muted);
+  margin-top: 2px;
+}
+
+.jsp-match-skills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jsp-match-skill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.jsp-match-summary {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--jsp-muted);
+}
+
+/* .jsp-matches-empty {
+  text-align: center;
+  padding: 18px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.jsp-matches-empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--jsp-muted);
+  max-width: 280px;
+}
+
+.jsp-matches-empty strong {
+  color: var(--jsp-text);
+  font-size: 14px;
+} */

@@ -5,6 +5,7 @@ var JOBSCRAPPER_CONFIG = {
   endpoints: {
     analyzeJob: "/analyze-job",
     scoreFit: "/score-fit",
+    scoreFitBatch: "/score-fit-batch",
     suggestImprovements: "/suggest-improvements",
     generateColdEmail: "/generate-cold-email",
     generateCoverLetter: "/generate-cover-letter",
