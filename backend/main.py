@@ -21,6 +21,9 @@ from schemas import (
     ColdEmailRequest,
     ColdEmailResponse,
     CoverLetterResponse,
+    FitBatchRequest,
+    FitBatchResponse,
+    FitBatchResultItem,
     FitScoreResponse,
     ImprovementsRequest,
     ImprovementsResponse,
@@ -102,6 +105,55 @@ async def get_fit_score(job_request: JobWithProfileRequest, request: Request):
         return await score_fit(job_request)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to score fit") from e
+
+
+@router.post("/score-fit-batch", response_model=FitBatchResponse)
+async def get_fit_score_batch(batch_request: FitBatchRequest, request: Request):
+    _check_rate_limit(request)
+
+    if not batch_request.jobs:
+        raise HTTPException(status_code=400, detail="At least one job is required.")
+
+    results: list[FitBatchResultItem] = []
+    for job in batch_request.jobs:
+        if len((job.description or "").strip()) < 50:
+            results.append(
+                FitBatchResultItem(
+                    url=job.url,
+                    error="Job description is too short to score.",
+                )
+            )
+            continue
+
+        try:
+            scored = await score_fit(
+                JobWithProfileRequest(
+                    title=job.title,
+                    description=job.description,
+                    company=job.company,
+                    location=job.location,
+                    url=job.url,
+                    profile=batch_request.profile,
+                )
+            )
+            results.append(
+                FitBatchResultItem(
+                    url=job.url,
+                    score=scored.score,
+                    matched_skills=scored.matched_skills,
+                    missing_skills=scored.missing_skills,
+                    summary=scored.summary,
+                )
+            )
+        except Exception:
+            results.append(
+                FitBatchResultItem(
+                    url=job.url,
+                    error="Failed to score fit",
+                )
+            )
+
+    return FitBatchResponse(results=results)
 
 
 @router.post("/suggest-improvements", response_model=ImprovementsResponse)

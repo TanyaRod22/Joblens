@@ -1,6 +1,8 @@
 const PROFILE_STORAGE_KEY = "joblens_profile";
 const SETTINGS_STORAGE_KEY = "joblens_settings";
 const TAILORED_DRAFTS_KEY = "joblens_tailored_drafts";
+const FIT_CACHE_KEY = "joblens_fit_cache";
+const FROM_MATCHES_KEY = "joblens_from_matches";
 
 const DEFAULT_PROFILE = {
   name: "",
@@ -17,6 +19,7 @@ const DEFAULT_PROFILE = {
 
 const DEFAULT_SETTINGS = {
   includeProfileInAnalysis: true,
+  minFitScore: 80,
 };
 
 function parseCommaList(value) {
@@ -127,18 +130,114 @@ function deleteProfile() {
 }
 
 function deleteAllUserData() {
-  return storageRemove([PROFILE_STORAGE_KEY, SETTINGS_STORAGE_KEY, TAILORED_DRAFTS_KEY]);
+  return storageRemove([
+    PROFILE_STORAGE_KEY,
+    SETTINGS_STORAGE_KEY,
+    TAILORED_DRAFTS_KEY,
+    FIT_CACHE_KEY,
+    FROM_MATCHES_KEY,
+  ]);
 }
 
 function loadSettings() {
-  return storageGet([SETTINGS_STORAGE_KEY]).then((result) => ({
-    ...DEFAULT_SETTINGS,
-    ...(result[SETTINGS_STORAGE_KEY] || {}),
-  }));
+  return storageGet([SETTINGS_STORAGE_KEY]).then((result) => {
+    const merged = {
+      ...DEFAULT_SETTINGS,
+      ...(result[SETTINGS_STORAGE_KEY] || {}),
+    };
+    const minFit = Number(merged.minFitScore);
+    merged.minFitScore = Number.isFinite(minFit)
+      ? Math.min(100, Math.max(50, Math.round(minFit)))
+      : DEFAULT_SETTINGS.minFitScore;
+    return merged;
+  });
 }
 
 function saveSettings(settings) {
   return storageSet({ [SETTINGS_STORAGE_KEY]: settings });
+}
+
+function profileCacheKey(profile) {
+  const parts = [
+    profile?.name || "",
+    (profile?.skills || []).join(","),
+    (profile?.experience || [])
+      .map((item) => `${item.title || ""}|${(item.bullets || []).join(";")}`)
+      .join("||"),
+    profile?.summary || "",
+  ];
+  let hash = 0;
+  const text = parts.join("::");
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  }
+  return String(hash);
+}
+
+function loadFitCache() {
+  return storageGet([FIT_CACHE_KEY]).then((result) => result[FIT_CACHE_KEY] || {});
+}
+
+function saveFitCache(cache) {
+  return storageSet({ [FIT_CACHE_KEY]: cache });
+}
+
+async function getCachedFitScore(jobUrl, profile) {
+  const cache = await loadFitCache();
+  const entry = cache[jobUrl];
+  if (!entry) return null;
+  if (entry.profileHash !== profileCacheKey(profile)) return null;
+  // Cache for 7 days
+  if (Date.now() - (entry.at || 0) > 7 * 24 * 60 * 60 * 1000) return null;
+  return entry;
+}
+
+async function setCachedFitScore(jobUrl, profile, fit) {
+  const cache = await loadFitCache();
+  cache[jobUrl] = {
+    score: fit.score,
+    matched_skills: fit.matched_skills || [],
+    missing_skills: fit.missing_skills || [],
+    summary: fit.summary || "",
+    profileHash: profileCacheKey(profile),
+    at: Date.now(),
+  };
+  // Keep cache from growing unbounded
+  const entries = Object.entries(cache).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
+  const trimmed = Object.fromEntries(entries.slice(0, 200));
+  await saveFitCache(trimmed);
+}
+
+async function markOpenedFromMatches(payload) {
+  return storageSet({
+    [FROM_MATCHES_KEY]: {
+      url: payload.url,
+      title: payload.title || "",
+      score: payload.score ?? null,
+      at: Date.now(),
+    },
+  });
+}
+
+async function consumeFromMatchesHint(currentUrl) {
+  const result = await storageGet([FROM_MATCHES_KEY]);
+  const hint = result[FROM_MATCHES_KEY];
+  if (!hint?.url) return null;
+  if (Date.now() - (hint.at || 0) > 30 * 60 * 1000) {
+    await storageRemove([FROM_MATCHES_KEY]);
+    return null;
+  }
+
+  const normalize = (url) => String(url || "").split("?")[0].split("#")[0].replace(/\/$/, "");
+  const current = normalize(currentUrl || window.location.href);
+  const target = normalize(hint.url);
+  if (!current || !target) return null;
+  if (current !== target && !current.startsWith(target) && !target.startsWith(current)) {
+    return null;
+  }
+
+  await storageRemove([FROM_MATCHES_KEY]);
+  return hint;
 }
 
 function loadTailoredDrafts() {

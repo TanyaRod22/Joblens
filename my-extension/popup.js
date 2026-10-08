@@ -7,7 +7,7 @@ async function sendToActiveTab(action) {
   } catch {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ["config.js", "profile.js", "content.js"],
+      files: ["config.js", "profile.js", "matches.js", "content.js"],
     });
     await chrome.tabs.sendMessage(tab.id, { action });
   }

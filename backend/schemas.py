@@ -69,6 +69,32 @@ class FitScoreResponse(BaseModel):
     summary: str = Field(description="One sentence explaining the fit score")
 
 
+class FitBatchJobItem(BaseModel):
+    title: str
+    description: str
+    company: str
+    location: Optional[str] = None
+    url: str
+
+
+class FitBatchRequest(BaseModel):
+    profile: Profile
+    jobs: list[FitBatchJobItem] = Field(default_factory=list, max_length=8)
+
+
+class FitBatchResultItem(BaseModel):
+    url: str
+    score: Optional[int] = Field(default=None, ge=0, le=100)
+    matched_skills: list[str] = Field(default_factory=list)
+    missing_skills: list[str] = Field(default_factory=list)
+    summary: str = ""
+    error: Optional[str] = None
+
+
+class FitBatchResponse(BaseModel):
+    results: list[FitBatchResultItem] = Field(default_factory=list)
+
+
 class ResumeBulletSuggestion(BaseModel):
     original: str = Field(default="", description="Original bullet if rewriting an existing one")
     suggested: str = Field(description="Suggested resume bullet text")

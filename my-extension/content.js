@@ -89,6 +89,7 @@ function createPanel() {
 
       <nav class="jsp-tabs" aria-label="Panel sections">
         <button type="button" class="jsp-tab jsp-tab-active" data-tab="scan">Scan</button>
+        <button type="button" class="jsp-tab" data-tab="matches">Matches</button>
         <button type="button" class="jsp-tab" data-tab="prep">Prep</button>
         <!-- <button type="button" class="jsp-tab" data-tab="improve">Improve</button> -->
         <button type="button" class="jsp-tab" data-tab="profile">Profile</button>
@@ -98,8 +99,8 @@ function createPanel() {
         <section class="jsp-view jsp-idle jsp-active" id="jsp-view-idle">
           <div class="jsp-idle-icon" aria-hidden="true">&#128269;</div>
           <div>
-            <h2>Ready to scan</h2>
-            <p>Open a job posting, then scan to get interview prep and cold email talking points.</p>
+            <h2 id="jsp-idle-title">Ready to scan</h2>
+            <p id="jsp-idle-copy">Open a job posting, then scan to get interview prep and cold email talking points.</p>
           </div>
           <button type="button" class="jsp-btn-primary" id="jsp-scan">Scan Job</button>
         </section>
@@ -140,6 +141,26 @@ function createPanel() {
           <p id="jsp-improve-job-meta" class="jsp-improve-job-meta jsp-hidden"></p>
           <div id="jsp-improve-content"></div>
         </section> -->
+
+        <section class="jsp-view jsp-matches-view" id="jsp-view-matches">
+          <div class="jsp-matches-intro">
+            <h2>Matches</h2>
+            <p>Scan a careers board for roles that fit your profile, then open strong matches to apply.</p>
+          </div>
+          <div class="jsp-matches-controls">
+            <button type="button" class="jsp-btn-primary" id="jsp-matches-find">Find matches</button>
+            <button type="button" class="jsp-btn-secondary jsp-hidden" id="jsp-matches-cancel">Cancel</button>
+          </div>
+          <p id="jsp-matches-status" class="jsp-matches-status jsp-hidden" role="status"></p>
+          <div id="jsp-matches-progress" class="jsp-matches-progress jsp-hidden" aria-hidden="true">
+            <div class="jsp-matches-progress-track">
+              <div id="jsp-matches-progress-bar" class="jsp-matches-progress-bar"></div>
+            </div>
+            <span id="jsp-matches-progress-label">Scoring…</span>
+          </div>
+          <p id="jsp-matches-summary" class="jsp-matches-summary jsp-hidden"></p>
+          <div id="jsp-matches-list" class="jsp-matches-list jsp-hidden"></div>
+        </section>
 
         <section class="jsp-view jsp-prep-view" id="jsp-view-prep">
           <div class="jsp-prep-intro">
@@ -355,6 +376,7 @@ function bindPanelEvents() {
   });
   document.getElementById("jsp-prep-clear")?.addEventListener("click", () => clearPrepChat());
   document.getElementById("jsp-prep-goto-scan")?.addEventListener("click", () => setTab("scan"));
+  bindMatchesEvents();
   const prepInput = document.getElementById("jsp-prep-input");
   prepInput?.addEventListener("keydown", (event) => {
     // Bubble-phase only — capture-phase stopPropagation would block typing in the textarea.
@@ -520,6 +542,12 @@ function setTab(tab) {
     return;
   }
 
+  if (tab === "matches") {
+    document.getElementById("jsp-view-matches")?.classList.add("jsp-active");
+    renderMatchesPanel();
+    return;
+  }
+
   setView(lastScanView);
 }
 
@@ -632,7 +660,9 @@ async function saveProfileForm(event) {
     if (!profile.resume_text && existing.resume_text) {
       profile.resume_text = existing.resume_text;
     }
+    const existingSettings = await loadSettings();
     const settings = {
+      ...existingSettings,
       includeProfileInAnalysis: document.getElementById("jsp-include-profile").checked,
     };
 
@@ -689,6 +719,39 @@ function buildJobRequestBody(job, profile) {
   return body;
 }
 
+async function applyFromMatchesIdleHint() {
+  const title = document.getElementById("jsp-idle-title");
+  const copy = document.getElementById("jsp-idle-copy");
+  if (!title || !copy) return;
+
+  try {
+    const hint = await consumeFromMatchesHint(window.location.href);
+    if (hint) {
+      title.textContent = "Opened from Matches";
+      const scoreBit = typeof hint.score === "number" ? ` (${hint.score}% fit)` : "";
+      const roleBit = hint.title ? `“${hint.title}”${scoreBit}` : "this role";
+      copy.textContent = `You opened ${roleBit} from Matches. Scan to analyze the full posting, then apply.`;
+      return;
+    }
+  } catch {
+    // Ignore storage errors — fall through to board/default copy
+  }
+
+  try {
+    if (typeof detectPageMode === "function" && detectPageMode().mode === "board") {
+      title.textContent = "Careers board detected";
+      copy.textContent =
+        "Use the Matches tab to shortlist roles that fit your profile, or open a single posting and scan it here.";
+      return;
+    }
+  } catch {
+    // ignore
+  }
+
+  title.textContent = "Ready to scan";
+  copy.textContent = "Open a job posting, then scan to get interview prep and cold email talking points.";
+}
+
 function openPanel() {
   createPanel();
   const backdrop = document.getElementById("jobscrapper-backdrop");
@@ -698,6 +761,7 @@ function openPanel() {
   setFabVisible(false);
   backdrop.classList.remove("jsp-open");
   panel.classList.remove("jsp-open");
+  applyFromMatchesIdleHint();
 
   // Defer open so the browser paints the closed state first (enables slide-in).
   requestAnimationFrame(() => {
