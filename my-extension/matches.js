@@ -122,7 +122,153 @@ function detectPageMode() {
     }
   }
 
+  if (host.includes("linkedin.com")) {
+    const listed = scrapeLinkedInBoard(companyFromBoardPage("LinkedIn"));
+    if (listed.length >= 2 || /\/jobs\/(search|collections)/i.test(path)) {
+      return { mode: listed.length >= 1 ? "board" : "detail", ats: "linkedin" };
+    }
+    return { mode: "detail", ats: "linkedin" };
+  }
+
+  if (host.includes("indeed.com")) {
+    const listed = scrapeIndeedBoard(companyFromBoardPage("Indeed"));
+    if (listed.length >= 2 || /\/jobs/i.test(path)) {
+      return { mode: listed.length >= 1 ? "board" : "detail", ats: "indeed" };
+    }
+    return { mode: "detail", ats: "indeed" };
+  }
+
+  if (host.includes("myworkdayjobs.com")) {
+    const listed = scrapeWorkdayBoard(companyFromBoardPage("Workday"));
+    if (listed.length >= 2) return { mode: "board", ats: "workday" };
+    return { mode: "detail", ats: "workday" };
+  }
+
+  if (host.includes("joinhandshake.com")) {
+    const listed = scrapeHandshakeBoard(companyFromBoardPage("Handshake"));
+    if (listed.length >= 2 || /job|posting|search/i.test(path)) {
+      return { mode: listed.length >= 1 ? "board" : "detail", ats: "handshake" };
+    }
+    return { mode: "detail", ats: "handshake" };
+  }
+
   return { mode: "detail", ats: "unknown" };
+}
+
+function companyFromBoardPage(fallback) {
+  const heading = document.querySelector("h1")?.textContent?.trim();
+  if (heading && heading.length < 60 && !/search|jobs|careers/i.test(heading)) return heading;
+  return fallback;
+}
+
+function pushBoardJob(jobs, job) {
+  if (!job?.title || !job?.url) return;
+  if (job.title.length < 2 || job.title.length > 160) return;
+  jobs.push(job);
+}
+
+function scrapeLinkedInBoard(company) {
+  const jobs = [];
+  const cards = document.querySelectorAll(
+    ".job-card-container, .jobs-search-results__list-item, li.scaffold-layout__list-item"
+  );
+  cards.forEach((el) => {
+    const link =
+      el.querySelector('a.job-card-list__title, a.job-card-container__link, a[href*="/jobs/view/"]') ||
+      el.querySelector("a[href]");
+    if (!link?.href) return;
+    const title =
+      link.getAttribute("aria-label")?.replace(/\s+with verification.*$/i, "").trim() ||
+      link.textContent?.trim();
+    const cardCompany =
+      el.querySelector(".artdeco-entity-lockup__subtitle, .job-card-container__primary-description")
+        ?.textContent?.trim() || company;
+    const location =
+      el.querySelector(".job-card-container__metadata-item, .job-card-container__metadata-wrapper li")
+        ?.textContent?.trim() || null;
+    const snippet =
+      el.querySelector(".job-card-list__snippet, .job-card-container__description")?.textContent?.trim() ||
+      "";
+    pushBoardJob(jobs, {
+      title,
+      company: cardCompany,
+      location,
+      department: null,
+      url: absoluteUrl(link.href),
+      description: snippet,
+    });
+  });
+  return jobs;
+}
+
+function scrapeIndeedBoard(company) {
+  const jobs = [];
+  document.querySelectorAll(".job_seen_beacon, .tapItem, .result").forEach((el) => {
+    const link = el.querySelector("a.jcs-JobTitle, h2 a, a[href*='/rc/clk'], a[href*='viewjob']");
+    if (!link?.href) return;
+    const title = link.textContent?.trim();
+    const cardCompany = el.querySelector('[data-testid="company-name"], .companyName')?.textContent?.trim() || company;
+    const location = el.querySelector('[data-testid="text-location"], .companyLocation')?.textContent?.trim() || null;
+    const snippet = el.querySelector(".job-snippet, [data-testid='jobsnippet']")?.textContent?.trim() || "";
+    pushBoardJob(jobs, {
+      title,
+      company: cardCompany,
+      location,
+      department: null,
+      url: absoluteUrl(link.href),
+      description: snippet,
+    });
+  });
+  return jobs;
+}
+
+function scrapeWorkdayBoard(company) {
+  const jobs = [];
+  document.querySelectorAll('a[data-automation-id="jobTitle"], li[data-automation-id="jobItem"]').forEach((el) => {
+    const link = el.matches("a") ? el : el.querySelector("a");
+    if (!link?.href) return;
+    const title = link.textContent?.trim();
+    const location =
+      el.querySelector('[data-automation-id="locations"], [data-automation-id="location"]')?.textContent?.trim() ||
+      null;
+    pushBoardJob(jobs, {
+      title,
+      company,
+      location,
+      department: null,
+      url: absoluteUrl(link.href),
+      description: "",
+    });
+  });
+  return jobs;
+}
+
+function scrapeHandshakeBoard(company) {
+  const jobs = [];
+  const cards = document.querySelectorAll(
+    '[data-hook*="job-result-card"], [data-hook*="search-result"], [data-testid*="job-card"], a[href*="/jobs/"]'
+  );
+  cards.forEach((el) => {
+    const link = el.matches("a") ? el : el.querySelector('a[href*="/jobs/"], a[href*="/job/"]');
+    if (!link?.href) return;
+    if (/\/jobs\/?$/i.test(link.pathname || "")) return;
+    const title =
+      el.querySelector("h2, h3, [data-hook*='job-title'], [data-testid*='job-title']")?.textContent?.trim() ||
+      link.textContent?.trim();
+    const cardCompany =
+      el.querySelector("[data-hook*='employer'], [data-testid*='employer']")?.textContent?.trim() || company;
+    const location = el.querySelector("[data-hook*='location'], [data-testid*='location']")?.textContent?.trim() || null;
+    const snippet = el.querySelector("p")?.textContent?.trim() || "";
+    pushBoardJob(jobs, {
+      title: title?.split("\n")[0]?.trim(),
+      company: cardCompany,
+      location,
+      department: null,
+      url: absoluteUrl(link.href),
+      description: snippet && snippet !== title ? snippet.slice(0, 500) : "",
+    });
+  });
+  return jobs;
 }
 
 function scrapeGreenhouseBoardDom(company) {
@@ -288,7 +434,8 @@ async function loadBoardJobs() {
     return {
       ok: false,
       reason: "not-board",
-      message: "Open a company careers board (Greenhouse, Lever, or Ashby listing page) to find matches.",
+      message:
+        "Open a careers listing (Greenhouse, Lever, Ashby, Handshake, LinkedIn Jobs, Indeed, or Workday) to find matches.",
     };
   }
 
@@ -327,11 +474,22 @@ async function loadBoardJobs() {
     console.warn("Board API failed, falling back to DOM scrape:", apiError);
   }
 
-  // DOM fallback (titles/links only — descriptions may be empty)
+  // DOM listings. Snippets only — full descriptions are not fetched for every card.
   let domJobs = [];
+  const siteLabel =
+    {
+      linkedin: "LinkedIn",
+      indeed: "Indeed",
+      workday: "Workday",
+      handshake: "Handshake",
+    }[page.ats] || companyGuess || "This board";
   if (page.ats === "greenhouse") domJobs = scrapeGreenhouseBoardDom(companyGuess);
   if (page.ats === "lever") domJobs = scrapeLeverBoardDom(companyGuess);
   if (page.ats === "ashby") domJobs = scrapeAshbyBoardDom(companyGuess);
+  if (page.ats === "linkedin") domJobs = scrapeLinkedInBoard(siteLabel);
+  if (page.ats === "indeed") domJobs = scrapeIndeedBoard(siteLabel);
+  if (page.ats === "workday") domJobs = scrapeWorkdayBoard(siteLabel);
+  if (page.ats === "handshake") domJobs = scrapeHandshakeBoard(siteLabel);
 
   const jobs = dedupeJobsByUrl(domJobs).slice(0, MATCHES_MAX_JOBS);
   if (!jobs.length) {
@@ -345,9 +503,83 @@ async function loadBoardJobs() {
   return {
     ok: true,
     jobs,
-    company: companyGuess,
+    company: siteLabel,
     source: `${page.ats}-dom`,
-    boardLabel: companyGuess,
+    boardLabel: siteLabel,
+  };
+}
+
+const AI_REFINE_LIMIT = 4;
+const STUDENT_TITLE = /\b(intern|internship|new grad|new-grad|entry[- ]level|university|campus|co-op|coop|new graduate)\b/i;
+
+function inferRoleType(title) {
+  const text = String(title || "");
+  if (/\bintern/i.test(text)) return "Internship";
+  if (/\b(new grad|new-grad|entry|new graduate|university grad|campus)\b/i.test(text)) return "New grad";
+  return "Full-time";
+}
+
+function localStudentFit(job, profile) {
+  const haystack = `${job.title || ""} ${job.department || ""} ${job.location || ""} ${job.description || ""}`.toLowerCase();
+  const skills = (profile?.skills || []).map((skill) => String(skill).trim()).filter((skill) => skill.length >= 2);
+  const matched = skills.filter((skill) => haystack.includes(skill.toLowerCase()));
+  const reasons = [];
+  let score = 42;
+
+  if (matched.length) {
+    score += Math.min(36, matched.length * 9);
+    reasons.push(`Matches ${matched.slice(0, 3).join(", ")}`);
+  }
+
+  const headline = `${profile?.headline || ""} ${(profile?.preferences?.target_roles || []).join(" ")}`.toLowerCase();
+  const titleWords = String(job.title || "")
+    .toLowerCase()
+    .split(/[^a-z0-9+#.]+/)
+    .filter((word) => word.length > 3);
+  const titleHits = titleWords.filter((word) => headline.includes(word));
+  if (titleHits.length) {
+    score += 8;
+    reasons.push(`Title lines up with ${titleHits.slice(0, 2).join(", ")}`);
+  }
+
+  if (STUDENT_TITLE.test(job.title || "")) {
+    score += 8;
+    reasons.push("Internship or new-grad posting");
+  }
+
+  const evidence = [
+    profile?.summary || "",
+    profile?.resume_text || "",
+    ...(profile?.experience || []).flatMap((entry) => [entry.title || "", ...(entry.bullets || [])]),
+  ]
+    .join(" ")
+    .toLowerCase();
+  if (/\b(project|course|coursework|research|intern)\b/.test(evidence)) {
+    score += 6;
+    reasons.push("Coursework, project, or internship on your profile counts");
+  }
+
+  const years = haystack.match(/(\d+)\+?\s+years/);
+  const earlyCareer = (profile?.experience || []).length <= 2;
+  if (years && Number(years[1]) >= 4 && earlyCareer && !STUDENT_TITLE.test(job.title || "")) {
+    score -= 8;
+    reasons.push(`Posting asks for ${years[1]}+ years`);
+  }
+
+  if (!reasons.length) reasons.push("Scored from the listing title and your profile");
+  if ((job.description || "").trim().length < 80) {
+    reasons.push("Listing snippet only — open the job for the full description");
+  }
+
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    ...job,
+    score,
+    matched_skills: matched.slice(0, 6),
+    missing_skills: [],
+    summary: reasons.slice(0, 3).join(". "),
+    scoreSource: "quick",
+    roleType: inferRoleType(job.title),
   };
 }
 
@@ -406,14 +638,14 @@ function setMatchesProgress(done, total) {
 function updateMatchesSummary(minScore) {
   const el = document.getElementById("jsp-matches-summary");
   if (!el) return;
-  const shown = matchesResults.filter((job) => (job.score ?? -1) >= minScore).length;
+  const shown = matchesResults.filter((job) => typeof job.score === "number" && job.score >= 75).length;
   if (!matchesMeta.totalFound) {
     el.textContent = "";
     el.classList.add("jsp-hidden");
     return;
   }
   el.classList.remove("jsp-hidden");
-  el.textContent = `${shown} of ${matchesMeta.scored || matchesMeta.totalFound} scored roles at ${minScore}%+ · ${matchesMeta.boardLabel || "this board"}`;
+  el.textContent = `${shown} of ${matchesMeta.scored || matchesMeta.totalFound} scored roles at 75%. ${matchesMeta.boardLabel || "this board"}`;
 }
 
 function renderMatchesList(minScore) {
@@ -422,7 +654,7 @@ function renderMatchesList(minScore) {
   if (!list) return;
 
   const filtered = matchesResults
-    .filter((job) => typeof job.score === "number" && job.score >= minScore)
+    .filter((job) => typeof job.score === "number" && job.score >= 75)
     .sort((a, b) => b.score - a.score);
 
   updateMatchesSummary(minScore);
@@ -440,27 +672,35 @@ function renderMatchesList(minScore) {
     .map((job) => {
       const metaParts = [job.location, job.department].filter(Boolean);
       const meta = metaParts.length ? metaParts.join(" · ") : job.company || "";
+      const sourceLabel = job.scoreSource === "model" ? "Checked" : "Quick";
       return `
-        <button type="button" class="jsp-match-card" data-url="${escapeMatchHtml(job.url)}" data-title="${escapeMatchHtml(job.title)}" data-score="${job.score}">
-          <div class="jsp-match-card-top">
-            <div class="jsp-match-card-text">
-              <strong class="jsp-match-title">${escapeMatchHtml(job.title)}</strong>
-              ${meta ? `<span class="jsp-match-meta">${escapeMatchHtml(meta)}</span>` : ""}
+        <article class="jsp-match-card">
+          <button type="button" class="jsp-match-open" data-url="${escapeMatchHtml(job.url)}" data-title="${escapeMatchHtml(job.title)}" data-score="${job.score}">
+            <div class="jsp-match-card-top">
+              <div class="jsp-match-card-text">
+                <strong class="jsp-match-title">${escapeMatchHtml(job.title)}</strong>
+                ${meta ? `<span class="jsp-match-meta">${escapeMatchHtml(meta)}</span>` : ""}
+                <span class="jsp-match-role">${escapeMatchHtml(job.roleType || inferRoleType(job.title))}</span>
+              </div>
+              <div class="jsp-match-score ${scoreClassForMatch(job.score)}">
+                <span class="jsp-match-score-number">${job.score}</span>
+                <span class="jsp-match-score-label">${sourceLabel}</span>
+              </div>
             </div>
-            <div class="jsp-match-score ${scoreClassForMatch(job.score)}">
-              <span class="jsp-match-score-number">${job.score}</span>
-              <span class="jsp-match-score-label">fit</span>
-            </div>
-          </div>
-          ${renderMatchSkills(job.matched_skills)}
-          ${job.summary ? `<p class="jsp-match-summary">${escapeMatchHtml(job.summary)}</p>` : ""}
-        </button>
+            ${renderMatchSkills(job.matched_skills)}
+            ${job.summary ? `<p class="jsp-match-summary">${escapeMatchHtml(job.summary)}</p>` : ""}
+          </button>
+          <button type="button" class="jsp-btn-text jsp-match-save" data-url="${escapeMatchHtml(job.url)}">Save</button>
+        </article>
       `;
     })
     .join("");
 
-  list.querySelectorAll(".jsp-match-card").forEach((card) => {
+  list.querySelectorAll(".jsp-match-open").forEach((card) => {
     card.addEventListener("click", () => handleMatchCardClick(card));
+  });
+  list.querySelectorAll(".jsp-match-save").forEach((button) => {
+    button.addEventListener("click", () => saveMatchToShortlist(button.dataset.url));
   });
 }
 
@@ -470,8 +710,18 @@ async function handleMatchCardClick(card) {
   const title = card.dataset.title || "";
   const score = Number(card.dataset.score);
 
+  const job = matchesResults.find((item) => item.url === url);
   try {
-    await markOpenedFromMatches({ url, title, score });
+    await markOpenedFromMatches({
+      url,
+      title: job?.title || title,
+      company: job?.company || "",
+      score: job?.score ?? score,
+      matched_skills: job?.matched_skills || [],
+      summary: job?.summary || "",
+      scoreSource: job?.scoreSource || "",
+      roleType: job?.roleType || inferRoleType(title),
+    });
   } catch {
     // Opening the tab still helps even if storage fails
   }
@@ -514,6 +764,7 @@ async function renderMatchesPanel() {
 
   const minScore = await syncMatchesThresholdUi();
   renderMatchesList(minScore);
+  renderShortlist();
 
   const { personalized } = await getProfileForRequest();
   const findBtn = document.getElementById("jsp-matches-find");
@@ -701,41 +952,76 @@ async function runMatchesScan() {
       source: board.source || "",
     };
 
-    const withDescriptions = board.jobs.filter((job) => (job.description || "").trim().length >= 50);
-    if (!withDescriptions.length) {
-      setMatchesStatus(
-        "Found listings, but job descriptions weren’t available to score. Open a supported board (Greenhouse, Lever, Ashby).",
-        { error: true }
-      );
-      matchesResults = [];
-      renderMatchesList((await loadSettings()).minFitScore);
-      return;
+    const quick = [];
+    for (const job of board.jobs) {
+      const cached = await getCachedFitScore(job.url, profileBundle.profile);
+      if (cached && typeof cached.score === "number") {
+        quick.push({
+          ...job,
+          score: cached.score,
+          matched_skills: cached.matched_skills || [],
+          missing_skills: cached.missing_skills || [],
+          summary: cached.summary || "",
+          scoreSource: "model",
+          roleType: inferRoleType(job.title),
+        });
+      } else {
+        quick.push(localStudentFit(job, profileBundle.profile));
+      }
     }
 
-    setMatchesStatus(`Scoring ${withDescriptions.length} roles against your profile…`);
-    setMatchesProgress(0, withDescriptions.length);
-
-    const scored = await scoreJobsAgainstProfile(
-      withDescriptions,
-      profileBundle.profile,
-      (done, total) => setMatchesProgress(done, total)
+    matchesResults = quick;
+    matchesMeta.scored = quick.length;
+    renderMatchesList(75);
+    renderShortlist();
+    setMatchesStatus(
+      `${quick.filter((job) => job.score >= 75).length} quick matches at 75%+. Checking the top ${AI_REFINE_LIMIT} full descriptions…`
     );
+
+    const refineTargets = quick
+      .filter((job) => job.scoreSource !== "model" && (job.description || "").trim().length >= 50)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, AI_REFINE_LIMIT);
+
+    if (refineTargets.length && !matchesScanAbort) {
+      setMatchesProgress(0, refineTargets.length);
+      try {
+        const refined = await scoreBatchOrFallback(refineTargets, profileBundle.profile);
+        const byUrl = new Map(refined.map((job) => [job.url, job]));
+        matchesResults = matchesResults.map((job) => {
+          const next = byUrl.get(job.url);
+          if (!next || typeof next.score !== "number") return job;
+          return {
+            ...job,
+            ...next,
+            scoreSource: "model",
+            roleType: inferRoleType(job.title),
+            summary: next.summary || job.summary,
+          };
+        });
+        setMatchesProgress(refineTargets.length, refineTargets.length);
+      } catch (error) {
+        if (error.message !== "RATE_LIMIT") throw error;
+        setMatchesStatus("Quick matches are ready. The full check hit the rate limit, so those scores stayed local.", {
+          error: true,
+        });
+      }
+    }
 
     if (matchesScanAbort) {
-      setMatchesStatus("Scan cancelled.");
+      setMatchesStatus("Scan cancelled. Quick matches stay on screen.");
       return;
     }
 
-    matchesResults = scored;
-    matchesMeta.scored = scored.length;
-    const minScore = (await loadSettings()).minFitScore;
-    setMatchesProgress(withDescriptions.length, withDescriptions.length);
+    const minScore = 75;
+    const shown = matchesResults.filter((job) => job.score >= minScore).length;
     setMatchesStatus(
-      scored.length
-        ? `Done — ${scored.filter((j) => j.score >= minScore).length} roles at ${minScore}%+.`
-        : "Finished scoring, but no usable fit scores were returned."
+      shown
+        ? `${shown} roles at 75%+. Quick scores use your skills and the listing. Checked scores read the description.`
+        : "No roles reached 75% from the titles and skills on this page. Update your profile skills, or open a posting and scan it."
     );
     renderMatchesList(minScore);
+    renderShortlist();
   } catch (error) {
     console.error("Matches scan failed:", error);
     if (error.message === "RATE_LIMIT") {
@@ -758,6 +1044,86 @@ async function runMatchesScan() {
 function cancelMatchesScan() {
   matchesScanAbort = true;
   setMatchesStatus("Cancelling…");
+}
+
+async function saveMatchToShortlist(url) {
+  const job = matchesResults.find((item) => item.url === url);
+  if (!job) return;
+  await upsertShortlistItem({
+    url: job.url,
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    score: job.score,
+    matched_skills: job.matched_skills,
+    summary: job.summary,
+    roleType: job.roleType || inferRoleType(job.title),
+  });
+  setMatchesStatus(`Saved “${job.title}” to your shortlist.`);
+  renderShortlist();
+}
+
+async function renderShortlist() {
+  const root = document.getElementById("jsp-shortlist");
+  if (!root) return;
+  const items = await loadShortlist();
+  if (!items.length) {
+    root.innerHTML = "";
+    root.classList.add("jsp-hidden");
+    return;
+  }
+  root.classList.remove("jsp-hidden");
+  root.innerHTML = `
+    <h3 class="jsp-shortlist-title">Shortlist</h3>
+    <ul class="jsp-shortlist">
+      ${items
+        .map(
+          (item) => `
+        <li class="jsp-shortlist-item" data-url="${escapeMatchHtml(item.url)}">
+          <div class="jsp-shortlist-main">
+            <strong>${escapeMatchHtml(item.title)}</strong>
+            <span>${escapeMatchHtml([item.company, item.roleType, item.score != null ? `${item.score}%` : ""].filter(Boolean).join(" · "))}</span>
+          </div>
+          <label class="jsp-shortlist-field">Status
+            <select class="jsp-shortlist-status">
+              ${["saved", "applied", "interview"]
+                .map(
+                  (status) =>
+                    `<option value="${status}" ${item.status === status ? "selected" : ""}>${status}</option>`
+                )
+                .join("")}
+            </select>
+          </label>
+          <label class="jsp-shortlist-field">Deadline
+            <input class="jsp-shortlist-deadline" type="date" value="${escapeMatchHtml(item.deadline || "")}" />
+          </label>
+          <button type="button" class="jsp-btn-text jsp-shortlist-open">Open</button>
+          <button type="button" class="jsp-btn-text jsp-shortlist-remove">Remove</button>
+        </li>`
+        )
+        .join("")}
+    </ul>
+  `;
+
+  root.querySelectorAll(".jsp-shortlist-item").forEach((row) => {
+    const url = row.dataset.url;
+    row.querySelector(".jsp-shortlist-status")?.addEventListener("change", (event) => {
+      updateShortlistItem(url, { status: event.target.value });
+    });
+    row.querySelector(".jsp-shortlist-deadline")?.addEventListener("change", (event) => {
+      updateShortlistItem(url, { deadline: event.target.value });
+    });
+    row.querySelector(".jsp-shortlist-open")?.addEventListener("click", async () => {
+      const item = items.find((entry) => entry.url === url);
+      if (!item) return;
+      await markOpenedFromMatches(item);
+      window.open(url, "_blank", "noopener,noreferrer");
+    });
+    row.querySelector(".jsp-shortlist-remove")?.addEventListener("click", async () => {
+      await removeShortlistItem(url);
+      renderShortlist();
+    });
+  });
 }
 
 function bindMatchesEvents() {
