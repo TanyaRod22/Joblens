@@ -26,6 +26,10 @@ FIT_SCORE_SYSTEM_PROMPT = """
 You compare a job posting against a candidate profile and produce an honest fit assessment.
 Score 0-100 based on skills overlap, relevant experience, and role alignment.
 Be specific about matched and missing skills — use short skill names (1-3 words).
+Many candidates are students or new graduates. Coursework, projects, research, and a single internship
+count as relevant evidence. Do not treat "years of experience" as a hard fail for intern or new-grad roles.
+In the summary, name the main reason the score moved up or down in one sentence.
+Never invent employers, projects, or metrics that are not in the profile.
 """.strip()
 
 IMPROVEMENTS_SYSTEM_PROMPT = """
@@ -42,8 +46,11 @@ Return 3-6 high-impact suggestions.
 
 COLD_EMAIL_SYSTEM_PROMPT = """
 You write concise, professional cold outreach emails for job applications.
-Keep emails under 200 words, warm but not overly casual, and specific to the role and candidate.
+Keep emails under 130 words, warm but not overly casual, and specific to the role and candidate.
+Write in a student or new-grad voice when the profile looks early-career.
 Include a clear ask (conversation, referral, or application follow-up).
+Use only employers, projects, and numbers that appear in the profile or posting.
+If a metric is missing, omit it. Never invent employers, GPAs, or results.
 """.strip()
 
 PARSE_RESUME_SYSTEM_PROMPT = """
@@ -55,8 +62,11 @@ Leave fields empty when information is not present — do not invent details.
 
 COVER_LETTER_SYSTEM_PROMPT = """
 You write tailored cover letters for job applications.
-Keep letters under 400 words, professional, and specific to the role and candidate background.
-Structure: opening hook, relevant experience, why this company, closing call to action.
+Keep letters under 280 words, professional, and specific to the role and candidate background.
+Write in a student or new-grad voice when the profile looks early-career.
+Structure: opening hook, relevant coursework or project or internship, why this company, closing call to action.
+Use only employers, projects, and numbers that appear in the profile or posting.
+If a metric is missing, omit it. Never invent employers, GPAs, or results.
 """.strip()
 
 INTERVIEW_CHAT_SYSTEM_PROMPT = """

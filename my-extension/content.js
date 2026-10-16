@@ -91,7 +91,7 @@ function createPanel() {
         <button type="button" class="jsp-tab jsp-tab-active" data-tab="scan">Scan</button>
         <button type="button" class="jsp-tab" data-tab="matches">Matches</button>
         <button type="button" class="jsp-tab" data-tab="prep">Prep</button>
-        <!-- <button type="button" class="jsp-tab" data-tab="improve">Improve</button> -->
+        <button type="button" class="jsp-tab" data-tab="improve">Improve</button>
         <button type="button" class="jsp-tab" data-tab="profile">Profile</button>
       </nav>
 
@@ -102,6 +102,7 @@ function createPanel() {
             <h2 id="jsp-idle-title">Ready to scan</h2>
             <p id="jsp-idle-copy">Open a job posting, then scan to get interview prep and cold email talking points.</p>
           </div>
+          <div id="jsp-idle-fit" class="jsp-hidden"></div>
           <button type="button" class="jsp-btn-primary" id="jsp-scan">Scan Job</button>
         </section>
 
@@ -133,14 +134,14 @@ function createPanel() {
           <div id="jsp-generated-output" class="jsp-hidden"></div>
         </section>
 
-        <!-- <section class="jsp-view jsp-improve-view" id="jsp-view-improve">
+        <section class="jsp-view jsp-improve-view" id="jsp-view-improve">
           <div class="jsp-improve-intro">
             <h2>Resume improvements</h2>
             <p id="jsp-improve-subtitle">Scan a job with your profile included to get tailored bullet suggestions.</p>
           </div>
           <p id="jsp-improve-job-meta" class="jsp-improve-job-meta jsp-hidden"></p>
           <div id="jsp-improve-content"></div>
-        </section> -->
+        </section>
 
         <section class="jsp-view jsp-matches-view" id="jsp-view-matches">
           <div class="jsp-matches-intro">
@@ -160,6 +161,7 @@ function createPanel() {
           </div>
           <p id="jsp-matches-summary" class="jsp-matches-summary jsp-hidden"></p>
           <div id="jsp-matches-list" class="jsp-matches-list jsp-hidden"></div>
+          <div id="jsp-shortlist" class="jsp-hidden"></div>
         </section>
 
         <section class="jsp-view jsp-prep-view" id="jsp-view-prep">
@@ -730,9 +732,11 @@ async function applyFromMatchesIdleHint() {
       title.textContent = "Opened from Matches";
       const scoreBit = typeof hint.score === "number" ? ` (${hint.score}% fit)` : "";
       const roleBit = hint.title ? `“${hint.title}”${scoreBit}` : "this role";
-      copy.textContent = `You opened ${roleBit} from Matches. Scan to analyze the full posting, then apply.`;
+      copy.textContent = `You opened ${roleBit} from Matches. The score below came with the listing. Scan still reads the full posting for prep.`;
+      renderCarriedFit(hint);
       return;
     }
+    document.getElementById("jsp-idle-fit")?.classList.add("jsp-hidden");
   } catch {
     // Ignore storage errors — fall through to board/default copy
   }
@@ -2355,21 +2359,21 @@ function renderResults(job, analysis, options = {}) {
     renderSection("Questions to Ask", renderListItems(analysis.questions_to_ask)),
   ];
 
-  // if (personalized) {
-  //   const suggestionCount =
-  //     currentTailoredDraft?.suggestions?.length || improvements?.suggestions?.length || 0;
-  //   if (suggestionCount) {
-  //     sections.push(
-  //       renderSection(
-  //         "Resume improvements",
-  //         `<p class="jsp-text">${suggestionCount} tailored suggestion${suggestionCount === 1 ? "" : "s"} ready.</p>
-  //          <div class="jsp-section-actions">
-  //            <button type="button" class="jsp-btn-secondary" id="jsp-goto-improve">Open Improve tab</button>
-  //          </div>`
-  //       )
-  //     );
-  //   }
-  // }
+  if (personalized) {
+    const suggestionCount =
+      currentTailoredDraft?.suggestions?.length || improvements?.suggestions?.length || 0;
+    if (suggestionCount) {
+      sections.push(
+        renderSection(
+          "Resume improvements",
+          `<p class="jsp-text">${suggestionCount} tailored suggestion${suggestionCount === 1 ? "" : "s"} ready.</p>
+           <div class="jsp-section-actions">
+             <button type="button" class="jsp-btn-secondary" id="jsp-goto-improve">Open Improve tab</button>
+           </div>`
+        )
+      );
+    }
+  }
 
   document.getElementById("jsp-results-sections").innerHTML = sections.join("");
   bindAccordionEvents();
@@ -2385,7 +2389,28 @@ function renderResults(job, analysis, options = {}) {
   });
 }
 
-function showGeneratedOutput(title, content, copyText) {
+function renderCarriedFit(hint) {
+  const slot = document.getElementById("jsp-idle-fit");
+  if (!slot || typeof hint?.score !== "number") return;
+  const skills = (hint.matched_skills || [])
+    .slice(0, 4)
+    .map((skill) => `<li class="jsp-match-skill">${escapeHtml(skill)}</li>`)
+    .join("");
+  const scoreClass = hint.score >= 75 ? "jsp-fit-high" : hint.score >= 50 ? "jsp-fit-mid" : "jsp-fit-low";
+  slot.classList.remove("jsp-hidden");
+  slot.innerHTML = `
+    <div class="jsp-fit-score ${scoreClass}">
+      <span class="jsp-fit-number">${hint.score}</span>
+      <div class="jsp-fit-details">
+        <strong class="jsp-fit-label">From Matches${hint.scoreSource === "quick" ? " · quick" : ""}</strong>
+        <p class="jsp-fit-summary">${escapeHtml(hint.summary || "Score carried from the careers board.")}</p>
+        ${skills ? `<ul class="jsp-match-skills">${skills}</ul>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function showGeneratedOutput(title, content) {
   const output = document.getElementById("jsp-generated-output");
   output.classList.remove("jsp-hidden");
   output.innerHTML = `
@@ -2394,11 +2419,13 @@ function showGeneratedOutput(title, content, copyText) {
         <strong>${escapeHtml(title)}</strong>
         <button type="button" class="jsp-btn-secondary" id="jsp-copy-generated">Copy</button>
       </div>
-      <pre class="jsp-generated-body">${escapeHtml(content)}</pre>
+      <textarea id="jsp-generated-editor" rows="10">${escapeHtml(content)}</textarea>
+      <p class="jsp-generated-note">Edit anything that names the wrong company or a number that is not on your resume, then copy.</p>
     </div>
   `;
   document.getElementById("jsp-copy-generated")?.addEventListener("click", () => {
-    navigator.clipboard.writeText(copyText);
+    const text = document.getElementById("jsp-generated-editor")?.value || "";
+    navigator.clipboard.writeText(text);
   });
   output.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
@@ -2421,7 +2448,7 @@ async function handleGenerateColdEmail() {
       cold_email_points: currentAnalysis.cold_email_points || [],
     });
     const fullText = `Subject: ${result.subject}\n\n${result.body}`;
-    showGeneratedOutput("Cold email draft", fullText, fullText);
+    showGeneratedOutput("Cold email draft", fullText);
   } catch (error) {
     if (error.message === "RATE_LIMIT") {
       showError("Rate limit reached", "Too many requests. Wait a minute and try again.");
@@ -2448,7 +2475,7 @@ async function handleGenerateCoverLetter() {
 
   try {
     const result = await postJson(ENDPOINTS.generateCoverLetter, buildJobRequestBody(currentJob, profile));
-    showGeneratedOutput("Cover letter draft", result.body, result.body);
+    showGeneratedOutput("Cover letter draft", result.body);
   } catch (error) {
     if (error.message === "RATE_LIMIT") {
       showError("Rate limit reached", "Too many requests. Wait a minute and try again.");

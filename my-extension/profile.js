@@ -3,6 +3,8 @@ const SETTINGS_STORAGE_KEY = "joblens_settings";
 const TAILORED_DRAFTS_KEY = "joblens_tailored_drafts";
 const FIT_CACHE_KEY = "joblens_fit_cache";
 const FROM_MATCHES_KEY = "joblens_from_matches";
+const SHORTLIST_KEY = "joblens_shortlist";
+const SHORTLIST_MAX = 80;
 
 const DEFAULT_PROFILE = {
   name: "",
@@ -136,6 +138,7 @@ function deleteAllUserData() {
     TAILORED_DRAFTS_KEY,
     FIT_CACHE_KEY,
     FROM_MATCHES_KEY,
+    SHORTLIST_KEY,
   ]);
 }
 
@@ -208,12 +211,72 @@ async function setCachedFitScore(jobUrl, profile, fit) {
   await saveFitCache(trimmed);
 }
 
+function shortlistKey(url) {
+  return String(url || "")
+    .split("?")[0]
+    .split("#")[0]
+    .replace(/\/$/, "")
+    .toLowerCase();
+}
+
+function loadShortlist() {
+  return storageGet([SHORTLIST_KEY]).then((result) => {
+    const list = result[SHORTLIST_KEY];
+    return Array.isArray(list) ? list : [];
+  });
+}
+
+async function upsertShortlistItem(item) {
+  const list = await loadShortlist();
+  const key = shortlistKey(item.url);
+  const existing = list.find((entry) => shortlistKey(entry.url) === key);
+  const next = {
+    url: item.url,
+    title: item.title || existing?.title || "Untitled role",
+    company: item.company || existing?.company || "",
+    location: item.location || existing?.location || "",
+    score: typeof item.score === "number" ? item.score : existing?.score ?? null,
+    matched_skills: item.matched_skills || existing?.matched_skills || [],
+    summary: item.summary || existing?.summary || "",
+    roleType: item.roleType || existing?.roleType || "Role",
+    status: existing?.status || "saved",
+    deadline: existing?.deadline || "",
+    savedAt: existing?.savedAt || Date.now(),
+  };
+  const without = list.filter((entry) => shortlistKey(entry.url) !== key);
+  without.unshift(next);
+  await storageSet({ [SHORTLIST_KEY]: without.slice(0, SHORTLIST_MAX) });
+  return next;
+}
+
+async function updateShortlistItem(url, patch) {
+  const list = await loadShortlist();
+  const key = shortlistKey(url);
+  const updated = list.map((entry) =>
+    shortlistKey(entry.url) === key ? { ...entry, ...patch } : entry
+  );
+  await storageSet({ [SHORTLIST_KEY]: updated });
+}
+
+async function removeShortlistItem(url) {
+  const key = shortlistKey(url);
+  const list = await loadShortlist();
+  await storageSet({
+    [SHORTLIST_KEY]: list.filter((entry) => shortlistKey(entry.url) !== key),
+  });
+}
+
 async function markOpenedFromMatches(payload) {
   return storageSet({
     [FROM_MATCHES_KEY]: {
       url: payload.url,
       title: payload.title || "",
+      company: payload.company || "",
       score: payload.score ?? null,
+      matched_skills: payload.matched_skills || [],
+      summary: payload.summary || "",
+      scoreSource: payload.scoreSource || "",
+      roleType: payload.roleType || "",
       at: Date.now(),
     },
   });
