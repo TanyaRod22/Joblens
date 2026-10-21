@@ -995,7 +995,7 @@
 
 .jsp-fit-details p,
 .jsp-fit-summary {
-  margin: 0;
+  margin: 10px 0 0 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--jsp-muted);
@@ -1008,7 +1008,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--jsp-muted);
-  margin: 0;
+  margin: 5px 0 0 0;
 }
 
 .jsp-fit-empty {
